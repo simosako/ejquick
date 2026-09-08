@@ -331,8 +331,7 @@ ON entries(headword_norm);
 ```sql
 CREATE VIRTUAL TABLE entries_fts
 USING fts5(
-    headword,
-    body,
+    headword_norm,
     content='entries',
     content_rowid='id',
     tokenize='trigram'
@@ -340,6 +339,8 @@ USING fts5(
 ```
 
 FTS5 trigram tokenizer の採用を第一候補とする。
+
+初期リリースでは部分一致検索の対象を見出し語に限定し、検索用に正規化した `headword_norm` のみを FTS index へ登録する。`body` の全文検索は初期リリースの対象外とし、将来追加する場合は見出し語検索と分離した検索モードおよび index として設計する。
 
 理由:
 
@@ -367,8 +368,7 @@ B-tree index による前方一致
 query length >= 3
     ↓
 FTS5 trigram 部分一致
-または
-B-tree index 前方一致
+（B-tree index の前方一致候補を優先）
 ```
 
 ユーザーが「前方一致モード」を明示的に選択している場合は、3文字以上でも B-tree index を利用できるようにする。
@@ -428,6 +428,10 @@ utf8.RuneCountInString(query)
     substring / FTS5
 ```
 
+3文字以上で Substring に切り替わった場合も、完全一致および前方一致する見出し語をその他の部分一致より優先する。これにより、2文字から3文字へ入力が進んだ際の候補一覧の変化を抑える。
+
+内部実装では、まず B-tree index で前方一致候補を検索し、検索結果の上限に空きがある場合のみ、FTS5 で前方一致以外の部分一致候補を補う。前方一致候補だけで上限に達した場合、その他の部分一致候補は取得しない。
+
 ただし、設定またはキー操作によって「常に prefix」を選択可能とする。
 
 ### 8.3 検索件数
@@ -465,6 +469,8 @@ LIMIT :limit;
 
 3文字以上では FTS5 trigram を利用する。
 
+Auto モードでは、最初に Prefix 検索を行い、残りの表示枠を Substring 検索で補う。Substring 検索からは、すでに取得した前方一致候補を除外する。
+
 概念:
 
 ```sql
@@ -489,10 +495,15 @@ Prefix 検索:
 
 Substring 検索:
 
-1. headword の先頭に一致
-2. headword 内で早い位置に一致
-3. 短い headword
-4. 必要に応じて FTS rank
+1. 完全一致
+2. headword の先頭に一致
+3. その他の部分一致
+
+前方一致以外の候補内での並び順は以下を候補とする。
+
+1. headword 内で早い位置に一致
+2. 短い headword
+3. 必要に応じて FTS rank
 
 単純な FTS rank が辞書検索に適するとは限らないため、ランキング方式は実測して決定する。
 
@@ -1325,7 +1336,6 @@ Telemetry も原則導入しない。
 - Go SQLite driver
 - Pure Go と FTS5 の具体的な実現方式
 - FTS5 tokenizer 設定
-- FTS index 対象を headword のみにするか body も含めるか
 - external content table の構成
 - raw 列を保持するか
 - page size / journal mode 等の PRAGMA
@@ -1334,10 +1344,8 @@ Telemetry も原則導入しない。
 
 - substring のランキング
 - prefix と substring の UI 上の切替方法
-- auto mode の細かい仕様
 - 日本語 normalization
 - 検索結果 limit
-- exact match の優先方法
 
 ### TUI
 
@@ -1530,6 +1538,7 @@ Prefix search
 Substring search
   SQLite FTS5
   trigram tokenizer
+  headword_norm only
 
 Configuration
   TOML
