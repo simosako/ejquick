@@ -518,11 +518,15 @@ Substring 検索:
 
 検索用の `headword_norm` を生成する。
 
-英語では最低限以下を検討する。
+表示用 `headword` は元データの表記を保持し、正規化は行わない。Builder で見出し語から `headword_norm` を生成する処理と、検索アプリで query を正規化する処理には、辞書種別ごとに同一の正規化関数を使用する。検索文字数は正規化後の query に対して数える。
 
-- Unicode 正規化
-- ASCII 大文字小文字の統一
-- 前後空白除去
+### 9.1 英和
+
+英和辞書では以下の正規化を行う。
+
+1. 前後空白を除去する
+2. Unicode NFC で正規化する
+3. Unicode Case Folding を適用する
 
 例:
 
@@ -534,17 +538,47 @@ english
 
 を検索上は同一視する。
 
-日本語については以下を検討する。
+アクセント記号、句読点、全角英数字などに対する互換正規化や独自置換は、初期リリースでは行わない。
 
-- Unicode normalization
-- 全角 / 半角
-- 記号
-- 長音
-- ひらがな / カタカナ
+### 9.2 和英
 
-ただし過度な正規化は辞書の見出し語を意図せず同一視する可能性があるため、初期実装では保守的に行う。
+和英辞書では以下の正規化を行う。
 
-表示用 `headword` は元データの表記を保持し、検索用 `headword_norm` と分離する。
+1. 前後空白を除去する
+2. Unicode NFKC で正規化する
+3. 見出し語に含まれる英字へ Unicode Case Folding を適用する
+
+これにより、全角・半角の英数字、半角・全角カタカナなど、Unicode の互換等価として定義されている表記差を検索上は吸収する。
+
+例:
+
+```text
+１
+1
+```
+
+を検索上は同一視する。
+
+漢数字、ひらがなとカタカナ、長音や送り仮名など、Unicode NFKC の対象外となる日本語固有の表記差は初期リリースでは同一視しない。
+
+```text
+一 != 1
+```
+
+### 9.3 将来拡張
+
+将来、検索品質と実データでの効果を検証した上で、以下の追加を検討する。
+
+- 英和における NFKC、アクセント記号、引用符、dash 等の表記揺れ吸収
+- 和英におけるひらがな・カタカナの統一
+- 和英における漢数字と算用数字の検索 alias
+- 長音や送り仮名など、日本語固有の表記揺れへの対応
+
+漢数字は一般語の一部にも現れるため、`一` を無条件に `1` へ置換する方式は採用しない。対応する場合は、元の `headword_norm` を維持したまま、追加の検索キーを保持する alias table または query expansion を検討する。
+
+正規化ルールにはバージョンを付け、DB の metadata に `normalization_version` として保存する。正規化ルールを変更した場合はバージョンを更新し、DB を再構築する。検索アプリは対応していない正規化バージョンのDBを使用しない。
+
+初期実装では過度な正規化を避け、異なる語を意図せず同一視しないことを優先する。
 
 ---
 
@@ -998,6 +1032,7 @@ build_time
 builder_version
 entry_count
 encoding
+normalization_version
 fts_version
 ```
 
@@ -1349,7 +1384,6 @@ Telemetry も原則導入しない。
 
 - substring のランキング
 - prefix と substring の UI 上の切替方法
-- 日本語 normalization
 - 検索結果 limit
 
 ### TUI
@@ -1544,6 +1578,10 @@ Substring search
   SQLite FTS5
   trigram tokenizer
   headword_norm only
+
+Normalization
+  eiji: NFC + Unicode Case Folding
+  waei: NFKC + Unicode Case Folding
 
 Configuration
   TOML
