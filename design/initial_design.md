@@ -910,27 +910,82 @@ current requestの結果messageを処理する場合も、最初に `context.Can
 
 ## 12. CLI 設計
 
-TUI だけでなく CLI としても利用可能にする。
+同じ `ejquick` binaryをTUIとCLI検索に使用し、positional queryの有無で動作を決める。subcommandや `--tui` / `--query` のような動作選択optionは設けない。
 
-例:
+### 12.1 起動形式
+
+positional argumentがない場合はTUIを起動する。
+
+```bash
+ejquick
+```
+
+positional argumentが1つある場合は、その値をqueryとしてCLI検索を1回実行し、結果をstdoutへ出力して終了する。
 
 ```bash
 ejquick english
+ejquick "take care"
+ejquick --dictionary waei "英語"
 ```
 
-英和検索:
+queryは正確に1つのpositional argumentとして受け取る。空白を含むqueryはshellでquoteする。複数のpositional argumentは暗黙に空白で結合せず、usage errorとする。空文字、または辞書種別ごとの正規化後に空となるqueryもusage errorとする。
+
+`-` で始まる文字列を検索する場合は、`--` でoption解析を終了する。
 
 ```bash
-ejquick --eiji english
+ejquick -- "-prefix"
 ```
 
-和英検索:
+### 12.2 Option
 
-```bash
-ejquick --waei 英語
+初期リリースでは以下を提供する。
+
+```text
+-d, --dictionary <eiji|waei>
+-c, --config <path>
+    --limit <1..500>
+    --format <plain|jsonl>
+-h, --help
+-v, --version
 ```
 
-CLI検索もTUIと同じAuto検索のみを使用する。初期リリースでは `--prefix`、`--substring` などの検索方式を選択するoptionを設けない。
+`--dictionary` を省略した場合はconfigの `default_dictionary` を使用する。`--limit` はconfigの `max_results` をそのprocessだけ上書きし、TUIとCLI検索の両方へ適用する。範囲外の値、未知のoption、option valueの欠落はusage errorとする。
+
+`--format` はCLI検索でのみ使用でき、省略時は `plain` とする。positional queryがないTUI起動で `--format` を明示した場合は、無視せずusage errorとする。
+
+CLI検索もTUIと同じAuto検索のみを使用する。初期リリースでは `--prefix`、`--substring` などの検索方式を選択するoptionを設けない。TUIへ初期queryを渡す機能も設けない。
+
+### 12.3 Stdout format
+
+CLI検索は `plain` と `jsonl` の2形式を提供する。どちらもUTF-8でstdoutへ出力し、ANSI styling、terminal幅による折り返し・切り詰め、見出し行、進捗、警告を含めない。診断とerrorはstderrまたはlog fileへ出力する。
+
+#### Plain
+
+既定形式。各エントリを見出し語、本文、空行の順で出力する。表示用 `headword` と `body` を改変しない。
+
+```text
+English
+meaning and description...
+
+English breakfast
+meaning and description...
+```
+
+最後のエントリもnewlineで終了する。結果が0件の場合はstdoutへ何も出力しない。
+
+#### JSON Lines
+
+`--format jsonl` では1エントリを1つのJSON objectとして1行に出力する。
+
+```json
+{"id":123,"dictionary":"eiji","headword":"English","body":"meaning and description..."}
+```
+
+fieldは `id`、`dictionary`、`headword`、`body` に固定し、`headword_norm`、FTS rank、内部の一致位置は出力しない。文字列は標準JSON規則でescapeし、各objectをnewlineで終了する。JSON配列にはせず、検索結果を順次処理できるようにする。
+
+両形式ともSearch Serviceから返された順序と重複エントリを維持する。
+
+### 12.4 Pipeline
 
 標準出力へ出せることで以下と組み合わせられる。
 
@@ -1535,6 +1590,21 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - mouse trackingを有効化せず、mouse event handlerを持たない
 - keyboardだけですべての初期機能を操作できる
 
+### 21.7 CLI invocation
+
+- positional argumentなしでTUIを選択する
+- positional argumentが1つならCLI検索を選択する
+- 空文字、正規化後の空文字、複数のpositional argumentをusage errorにする
+- `--` の後に `-` で始まるqueryを受け付ける
+- `--dictionary` と `--limit` がconfigをprocess内だけで上書きする
+- 未知のoption、option value欠落、範囲外のlimitをusage errorにする
+- `--prefix` と `--substring` を提供しない
+- CLI検索の既定formatがplainである
+- plainが見出し語、本文、空行をANSI stylingや折り返しなしで出力する
+- jsonlが固定fieldを正しくescapeし、1エントリ1行で出力する
+- 両formatが結果順と重複を維持し、0件ではstdoutへ何も出力しない
+- TUI起動で明示された `--format` をusage errorにする
+
 ---
 
 ## 22. OSS / ライセンス
@@ -1615,9 +1685,6 @@ Telemetry も原則導入しない。
 
 ### CLI
 
-- command / option 名
-- stdout format
-- JSON output の有無
 - pipe 入力対応
 
 ### Builder
