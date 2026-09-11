@@ -514,11 +514,20 @@ Auto モードでは、最初に Prefix 検索を行い、残りの表示枠を 
 SELECT e.id, e.headword, e.body
 FROM entries_fts f
 JOIN entries e ON e.id = f.rowid
-WHERE entries_fts MATCH :query
+WHERE entries_fts MATCH :fts_query
+  AND instr(e.headword_norm, :query) > 1
 LIMIT :limit;
 ```
 
-具体的な MATCH query のエスケープ、特殊文字処理、ランキングは実装時に確定する。
+`:query` は辞書種別に応じて正規化済みの検索文字列とする。`:fts_query` は、`:query` 内の `"` を `""` へ置換した後、全体を `"` で囲んだFTS5 quoted phraseとする。
+
+```go
+ftsQuery := `"` + strings.ReplaceAll(query, `"`, `""`) + `"`
+```
+
+SQL文字列へ値を連結せず、`:query` と `:fts_query` はどちらもSQL parameterとしてbindする。利用者が入力した `AND`、`OR`、`NOT`、引用符、括弧などはFTS5構文として解釈せず、常に検索対象のliteral文字列として扱う。初期リリースではFTS5 query syntaxを利用者へ公開しない。
+
+`instr(e.headword_norm, :query) > 1` により、正規化済み見出し語にliteralなqueryが実在することを確認すると同時に、先にPrefix検索で取得した完全一致・前方一致候補を除外する。
 
 ### 8.6 並び順
 
@@ -972,10 +981,20 @@ ejquick-build \
   --output waei.sqlite3
 ```
 
+既存DBを明示的に置換する場合のみ `--force` を指定する。
+
+```bash
+ejquick-build --type eiji --input EIJIRO144-10.TXT --output eiji.sqlite3 --force
+```
+
 ### 14.2 変換フロー
 
 ```text
 TXT
+ ↓
+出力先と同じdirectoryに一時DBを作成
+ ↓
+Builder用PRAGMAを設定
  ↓
 strict CP932 decode
  ↓
@@ -1001,10 +1020,33 @@ ANALYZE
  ↓
 必要に応じて compaction
  ↓
-完成 DB
+一時DBをcloseしてread-onlyで最終検査
+ ↓
+完成DBとして原子的にrename / replace
 ```
 
-### 14.3 INSERT 性能
+### 14.3 Builder PRAGMA
+
+構築中の一時DBには以下の初期設定を使用する。`page_size` はschemaを作成する前に設定する。
+
+```sql
+PRAGMA page_size = 4096;
+PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA locking_mode = EXCLUSIVE;
+PRAGMA temp_store = FILE;
+PRAGMA cache_size = -131072;
+```
+
+負数の `cache_size` はKiB単位の上限であり、初期値を128 MiBとする。`temp_store=FILE` として、B-tree indexやFTS indexの構築時に使用メモリが無制限に増加することを避ける。
+
+一時DBは他processから利用せず、構築・検査中にエラーまたはprocess停止が発生した場合は破棄する。このためrollback journalと途中状態の耐久性を省略し、bulk buildの速度を優先する。エラー後に同じ一時DBをrollbackして再利用しない。
+
+完成DBはread-onlyで使用し、WAL modeは使用しない。完成時に `-wal` や `-shm` などのsidecar fileを必要としない単一DB fileとする。
+
+`page_size=4096` と `cache_size=-131072` は初期値とし、実データbenchmarkではDB size、build時間、検索latency、最大RSSを測定する。変更する場合は測定結果を根拠とする。
+
+### 14.4 INSERT 性能
 
 数百万行を扱うため、1行ごとの autocommit は行わない。
 
@@ -1028,7 +1070,7 @@ ANALYZE
 
 プログラム作成後に実際にデータを投入し、速度を測定。遅いようなら最適化を検討する。
 
-### 14.4 Compaction
+### 14.5 Compaction
 
 DB 作成後に必要に応じて以下を検討する。
 
@@ -1046,7 +1088,7 @@ VACUUM は時間と一時ディスクを多く使用するため、常に実行�
 ejquick-build --compact
 ```
 
-### 14.5 Builder metadata
+### 14.6 Builder metadata
 
 DB に生成情報を保存する。
 
@@ -1077,6 +1119,20 @@ fts_version
 ```
 
 検索アプリは `schema_version` を見て互換性を確認する。
+
+### 14.7 完成DBの公開
+
+Builder は `--output` へ直接書き込まず、出力先と同じdirectoryに衝突しない名前の一時DBを作成する。同じfilesystem内でのrenameを利用できるよう、systemの一時directoryは使用しない。
+
+FTS5 integrity-checkを含むすべての構築処理を完了した後、DBをcloseし、一時DBをread-onlyで開き直してschema、metadata、件数、検索smoke testを検査する。検査に成功した一時DBだけを完成DBとして公開する。
+
+公開前に一時DB fileを明示的に同期する。renameまたはreplace後は、OSが対応する場合に出力先directoryも同期し、電源断後に完成DBのdirectory entryが失われる可能性を抑える。
+
+`--output` がすでに存在し、`--force` が指定されていない場合は、既存DBを変更せずエラー終了する。`--force` が指定された場合はOSごとの原子的な置換機能を使用し、既存DBを削除してからrenameする実装にはしない。置換処理に失敗した場合は既存DBを維持し、エラー終了する。
+
+Windowsでは検索アプリなどが既存DBを開いていると置換に失敗する可能性がある。その場合は既存DBを維持したまま、使用中のアプリケーションを閉じて再実行するよう表示する。
+
+構築または検査に失敗した場合は完成DBを変更せず、一時DBの削除を試みる。process強制終了などで一時DBが残っても完成DBとしては認識しない。
 
 ---
 
@@ -1326,6 +1382,9 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - Unicode
 - B-treeとFTS5でのcase folding結果の一致
 - アクセント付き文字とアクセントなし文字の区別
+- `AND`、`OR`、`NOT`、引用符、括弧を含むliteral query
+- FTS5 query syntax errorとSQL injectionが発生しないこと
+- Substring候補から完全一致・前方一致候補が除外されること
 - 1文字
 - 2文字
 - 3文字
@@ -1340,6 +1399,24 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 ```bash
 go test -bench .
 ```
+
+Builderのbenchmarkでは、少なくとも以下を記録する。
+
+- DB size
+- build時間
+- Prefix / Substring検索latency
+- 最大RSS
+- 一時disk使用量
+
+### 21.5 Builder publication
+
+以下を各対応OSで検証する。
+
+- 既存DBがあり `--force` がない場合は変更せず失敗する
+- 構築・検査失敗時に既存DBが維持される
+- `--force` 成功時に検査済みDBへ原子的に置換される
+- 置換失敗時に既存DBが維持される
+- 残存した一時DBを完成DBとして使用しない
 
 ---
 
@@ -1418,10 +1495,6 @@ Telemetry も原則導入しない。
 - 正式プログラム名
 - OSS license
 - repository 名
-
-### SQLite
-
-- page size / journal mode 等の PRAGMA
 
 ### 検索
 
