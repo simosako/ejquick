@@ -107,16 +107,16 @@ func TestBuildBasicDatabase(t *testing.T) {
 
 	// Metadata basics.
 	checkMeta(t, db, map[string]string{
-		"schema_version":      "1",
-		"dictionary_type":     "eiji",
-		"source_version":      "1-0",
-		"source_line_count":   "4",
-		"entry_count":         "4",
-		"skipped_entry_count": "0",
-		"encoding":            "CP932",
+		"schema_version":        "1",
+		"dictionary_type":       "eiji",
+		"source_version":        "1-0",
+		"source_line_count":     "4",
+		"entry_count":           "4",
+		"skipped_entry_count":   "0",
+		"encoding":              "CP932",
 		"normalization_version": "1",
-		"fts_version":         "1",
-		"compacted":           "false",
+		"fts_version":           "1",
+		"compacted":             "false",
 	})
 }
 
@@ -124,8 +124,8 @@ func TestBuildSkipsKeepIDGaps(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "WAEIJI1-0.TXT", encodeCP932Lines(t, []string{
 		"ねこ : cat",       // line 1 ok
-		"malformed line",   // line 2 skipped: missing separator
-		"a : b : c",        // line 3 skipped: multiple separators
+		"malformed line", // line 2 skipped: missing separator
+		"a : b : c",      // line 3 skipped: multiple separators
 		"いぬ : dog",       // line 4 ok
 	}))
 	output := filepath.Join(dir, "waei.sqlite3")

@@ -333,13 +333,13 @@ func validate(path string, opts Options, stats Stats) error {
 		return err
 	}
 	checks := map[string]string{
-		KeySchemaVersion:    SchemaVersion,
-		KeyDictionaryType:   opts.Type.String(),
-		KeyNormalizationVer: NormalizationVersion(),
-		KeyFTSVersion:       FTSVersion,
-		KeyEncoding:         Encoding,
-		KeySourceLineCount:  fmt.Sprintf("%d", stats.SourceLines),
-		KeyEntryCount:       fmt.Sprintf("%d", stats.Entries),
+		KeySchemaVersion:     SchemaVersion,
+		KeyDictionaryType:    opts.Type.String(),
+		KeyNormalizationVer:  NormalizationVersion(),
+		KeyFTSVersion:        FTSVersion,
+		KeyEncoding:          Encoding,
+		KeySourceLineCount:   fmt.Sprintf("%d", stats.SourceLines),
+		KeyEntryCount:        fmt.Sprintf("%d", stats.Entries),
 		KeySkippedEntryCount: fmt.Sprintf("%d", stats.Skipped),
 	}
 	wantCompact := "false"

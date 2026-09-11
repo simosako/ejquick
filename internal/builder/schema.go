@@ -70,19 +70,19 @@ PRAGMA cache_size = -131072;
 
 // Metadata keys stored in the metadata table.
 const (
-	KeySchemaVersion       = "schema_version"
-	KeyDictionaryType      = "dictionary_type"
-	KeySourceVersion       = "source_version"
-	KeySourceFilename      = "source_filename"
-	KeyBuildTime           = "build_time"
-	KeyBuilderVersion      = "builder_version"
-	KeySourceLineCount     = "source_line_count"
-	KeyEntryCount          = "entry_count"
-	KeySkippedEntryCount   = "skipped_entry_count"
-	KeyEncoding            = "encoding"
-	KeyNormalizationVer    = "normalization_version"
-	KeyFTSVersion          = "fts_version"
-	KeyCompacted           = "compacted"
+	KeySchemaVersion     = "schema_version"
+	KeyDictionaryType    = "dictionary_type"
+	KeySourceVersion     = "source_version"
+	KeySourceFilename    = "source_filename"
+	KeyBuildTime         = "build_time"
+	KeyBuilderVersion    = "builder_version"
+	KeySourceLineCount   = "source_line_count"
+	KeyEntryCount        = "entry_count"
+	KeySkippedEntryCount = "skipped_entry_count"
+	KeyEncoding          = "encoding"
+	KeyNormalizationVer  = "normalization_version"
+	KeyFTSVersion        = "fts_version"
+	KeyCompacted         = "compacted"
 )
 
 // Encoding is the fixed source encoding name stored in metadata.

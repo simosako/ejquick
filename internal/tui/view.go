@@ -12,10 +12,10 @@ import (
 
 // Layout constants from the design.
 const (
-	minColumns     = 80
-	leftMinWidth   = 24
-	leftMaxWidth   = 50
-	scrollOverlap  = 1 // one overlapping row between pages
+	minColumns    = 80
+	leftMinWidth  = 24
+	leftMaxWidth  = 50
+	scrollOverlap = 1 // one overlapping row between pages
 )
 
 // Styling: only reverse, bold, and dim on the terminal's default colors.
@@ -409,7 +409,7 @@ func firstLine(s string) string {
 	return s
 }
 
-func (m *Model) bold(s string) string   { return styleBold + s + styleReset }
-func (m *Model) dim(s string) string    { return styleDim + s + styleReset }
+func (m *Model) bold(s string) string { return styleBold + s + styleReset }
+func (m *Model) dim(s string) string  { return styleDim + s + styleReset }
 
 var _ = search.Entry{} // keep the search import for the entry type docs

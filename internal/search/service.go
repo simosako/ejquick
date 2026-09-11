@@ -112,10 +112,10 @@ func toEntries(rows []candidateRow) []Entry {
 // in rune units.
 func rankPrefixPool(normQuery string, pool []candidateRow) []candidateRow {
 	type key struct {
-		exact   int
-		runes   int
-		norm    string
-		id      int64
+		exact int
+		runes int
+		norm  string
+		id    int64
 	}
 	keys := make([]key, len(pool))
 	for i, c := range pool {

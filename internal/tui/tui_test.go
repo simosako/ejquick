@@ -92,7 +92,7 @@ func key(s string) tea.KeyPressMsg {
 	codes := map[string]rune{
 		"down": tea.KeyDown, "up": tea.KeyUp,
 		"pgdown": tea.KeyPgDown, "pgup": tea.KeyPgUp,
-		"tab": tea.KeyTab,
+		"tab":  tea.KeyTab,
 		"left": tea.KeyLeft, "right": tea.KeyRight,
 		"backspace": tea.KeyBackspace, "delete": tea.KeyDelete,
 		"home": tea.KeyHome, "end": tea.KeyEnd,

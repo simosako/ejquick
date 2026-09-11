@@ -1,0 +1,166 @@
+EJQuick Third-Party Notices
+===========================
+
+EJQuick embeds the following open-source modules in its release binaries.
+Each module remains under its own license; the list below reflects the
+dependency graph of the current release. Regenerate with
+`go version -m <binary>` after dependency updates.
+
+MIT License
+-----------
+
+The following modules are licensed under the MIT License. The full license
+text is reproduced at the end of this file.
+
+  charm.land/bubbletea/v2 v2.0.9
+    Copyright (c) 2020-2025 Charm, Inc.
+
+  charm.land/lipgloss/v2 v2.0.6
+    Copyright (c) 2021 Charm, Inc.
+
+  github.com/charmbracelet/colorprofile v0.4.3
+    Copyright (c) 2024 Charm, Inc.
+
+  github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
+    Copyright (c) 2025 Charm, Inc.
+
+  github.com/charmbracelet/x/ansi v0.11.8
+    Copyright (c) 2023 Charm, Inc.
+
+  github.com/charmbracelet/x/term v0.2.2
+    Copyright (c) 2024 Charm, Inc.
+
+  github.com/charmbracelet/x/termios v0.1.1
+    Copyright (c) 2024 Charm, Inc.
+
+  github.com/clipperhouse/displaywidth v0.11.0
+    Copyright (c) 2025 C & P Consultants Ltd
+
+  github.com/clipperhouse/uax29/v2 v2.7.0
+    Copyright (c) 2025 C & P Consultants Ltd
+
+  github.com/dustin/go-humanize v1.0.1
+    Copyright (c) 2005-2008 Dustin Sallings <dustin@spy.net>
+
+  github.com/lucasb-eyer/go-colorful v1.4.1
+    Copyright (c) 2013 Lucas Beyer
+    (Contains code from the Go project under the BSD-3-Clause license.)
+
+  github.com/mattn/go-runewidth v0.0.24
+    Copyright (c) 2016 Yasuhiro Matsumoto
+
+  github.com/muesli/cancelreader v0.2.2
+    Copyright (c) 2022 Christian Muehlhaeuser
+
+  github.com/pelletier/go-toml/v2 v2.4.3
+    Copyright (c) 2013 - 2024 Thomas Pelletier, Eric Cornely, and others
+
+  github.com/rivo/uniseg v0.4.7
+    Copyright (c) 2019 Peter Kvitek, Olivier Milla
+
+  github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+    Copyright (c) 2016 George Nachman
+
+BSD 3-Clause License
+--------------------
+
+The following modules are licensed under the BSD 3-Clause "New" or
+"Revised" License. The full license text is reproduced at the end of this
+file.
+
+  github.com/google/uuid v1.6.0
+    Copyright (c) 2009, 2014 Google Inc. All rights reserved.
+
+  github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec
+    Copyright (c) 2012 The Go Authors. All rights reserved.
+
+  golang.org/x/sync v0.23.0
+    Copyright (c) 2009 The Go Authors. All rights reserved.
+
+  golang.org/x/sys v0.47.0
+    Copyright (c) 2009 The Go Authors. All rights reserved.
+
+  golang.org/x/text v0.42.0
+    Copyright (c) 2009 The Go Authors. All rights reserved.
+
+  modernc.org/sqlite v1.58.0
+    Copyright (c) 2017 The Sqlite Authors. All rights reserved.
+
+  modernc.org/libc v1.75.6
+    Copyright (c) 2017 The Libc Authors. All rights reserved.
+
+  modernc.org/mathutil v1.7.1
+    Copyright (c) 2014 The mathutil Authors. All rights reserved.
+
+  modernc.org/memory v1.12.1
+    Copyright (c) 2017 The Memory Authors. All rights reserved.
+
+SQLite database engine
+----------------------
+
+The SQLite database engine compiled into modernc.org/sqlite (including the
+FTS5 module) is in the public domain. See
+https://www.sqlite.org/copyright.html.
+
+The modernc.org/sqlite module additionally contains sqlite-vec sources
+(Apache-2.0 OR MIT, Copyright (c) 2024 Alex Garcia) in the `vec` package.
+EJQuick does not import that package.
+
+Other modules
+-------------
+
+The Go standard library and runtime (BSD 3-Clause, Copyright (c) The Go
+Authors) are linked into every binary built with the Go toolchain.
+
+Full license texts
+------------------
+
+MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining
+  a copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be
+  included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+BSD 3-Clause License
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are
+  met:
+
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+
+  3. Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+  PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

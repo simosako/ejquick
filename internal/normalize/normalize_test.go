@@ -9,9 +9,9 @@ import (
 
 func TestNormalizeEiji(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    string
-		want  string
+		name string
+		in   string
+		want string
 	}{
 		{"lowercase passthrough", "english", "english"},
 		{"uppercase to lower", "English", "english"},

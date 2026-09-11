@@ -66,10 +66,10 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 		}
 	}
 	want := map[string]string{
-		"schema_version":       "1",
-		"dictionary_type":      dt.String(),
+		"schema_version":        "1",
+		"dictionary_type":       dt.String(),
 		"normalization_version": normalize.Version,
-		"fts_version":          "1",
+		"fts_version":           "1",
 	}
 	rows, err := db.Query("SELECT key, value FROM metadata")
 	if err != nil {

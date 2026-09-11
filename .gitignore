@@ -1,1 +1,4 @@
 /source/
+# Built artifacts
+*.sqlite3
+/dist/

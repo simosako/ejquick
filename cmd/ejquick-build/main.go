@@ -57,15 +57,15 @@ func parseArgs(args []string) (*builder.Options, error) {
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 
 	var (
-		typeStr = fs.String("type", "", "dictionary type: eiji or waei")
-		input   = fs.String("input", "", "source TXT file")
-		output  = fs.String("output", "", "destination database")
-		force   = fs.Bool("force", false, "replace existing output")
-		compact = fs.Bool("compact", false, "run VACUUM")
-		help    = fs.Bool("h", false, "show help")
+		typeStr  = fs.String("type", "", "dictionary type: eiji or waei")
+		input    = fs.String("input", "", "source TXT file")
+		output   = fs.String("output", "", "destination database")
+		force    = fs.Bool("force", false, "replace existing output")
+		compact  = fs.Bool("compact", false, "run VACUUM")
+		help     = fs.Bool("h", false, "show help")
 		helpLong = fs.Bool("help", false, "show help")
-		ver     = fs.Bool("v", false, "show version")
-		verLong = fs.Bool("version", false, "show version")
+		ver      = fs.Bool("v", false, "show version")
+		verLong  = fs.Bool("version", false, "show version")
 	)
 	if err := fs.Parse(args); err != nil {
 		return nil, err
