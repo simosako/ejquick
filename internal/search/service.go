@@ -31,6 +31,9 @@ func NewService(repo *Repository, maxResults int) (*Service, error) {
 // MaxResults returns the configured result limit.
 func (s *Service) MaxResults() int { return s.maxResults }
 
+// Close releases the underlying repository.
+func (s *Service) Close() error { return s.repo.Close() }
+
 // Search runs the Auto search for the raw query string. The query is
 // normalized with the repository's dictionary rules. An empty (or
 // normalization-empty) query returns no rows without touching the

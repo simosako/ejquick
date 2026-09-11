@@ -14,6 +14,7 @@ import (
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
 	"github.com/simosako/ejquick/internal/search"
+	"github.com/simosako/ejquick/internal/tui"
 )
 
 // version is stamped at build time with -ldflags.
@@ -56,9 +57,11 @@ func main() {
 	}
 
 	if query == "" {
-		// TUI mode is delivered in a later phase.
-		fmt.Fprintln(os.Stderr, "ejquick: TUI is not yet implemented; pass a query to use the CLI search")
-		os.Exit(2)
+		if err := tui.Run(cfg, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
+			os.Exit(2)
+		}
+		return
 	}
 
 	os.Exit(runCLISearch(cfg, opts, query))
