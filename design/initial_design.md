@@ -723,9 +723,9 @@ terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せ�
 
 右ペインの下端には、本文が表示範囲を超える場合だけ現在位置と総行数が分かるscroll indicatorを表示する。PageUp / PageDownではqueryを変更せず、DB queryや `tea.Cmd` を発行せず、検索入力のfocusも維持する。
 
-### 10.3 キー操作案
+### 10.3 初期キー操作
 
-未確定だが以下を候補とする。
+初期リリースでは以下のkeymapを固定で提供し、key bindingの設定機能は設けない。
 
 英和・和英の両DBが利用可能な場合は、Tabで辞書をtoggleする。切替時はrequest IDをincrementして実行中検索をcancelし、query、検索結果、選択位置、一覧scroll位置、詳細scroll位置、検索errorをすべてclearする。切替直後はDB検索を行わず、右ペインに操作案内を表示する。
 
@@ -735,14 +735,26 @@ terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せ�
 
 | Key | Action |
 |---|---|
-| 文字入力 | query 更新 / 即検索 |
-| Backspace | query 削除 / 即検索 |
+| 文字入力 | queryのcursor位置へ挿入 |
+| Left / Right | query cursorを前後へ移動 |
+| Home / Ctrl-A | query cursorを先頭へ移動 |
+| End / Ctrl-E | query cursorを末尾へ移動 |
+| Backspace | cursor直前の文字を削除 |
+| Delete | cursor直後の文字を削除 |
+| Ctrl-W | cursor直前の単語を削除 |
+| Ctrl-U | query全体をclear |
 | Up / Ctrl-P | 前候補 |
 | Down / Ctrl-N | 次候補 |
 | PageUp | 右ペインを1ページ上へscroll |
 | PageDown | 右ペインを1ページ下へscroll |
 | Ctrl-C | 終了 |
 | Tab | 英和 / 和英辞書を切替し、検索状態をclear |
+
+文字入力、Backspace、Delete、Ctrl-W、Ctrl-Uはquery内容が実際に変化した場合だけ、request ID更新、旧検索cancel、新検索を行う。Left / Right、Home / End、Ctrl-A / Ctrl-Eはcursor移動だけを行い、検索を開始しない。削除対象がない場合もno-opとし、検索を開始しない。
+
+文字挿入、cursor移動、Backspace、DeleteはUnicode grapheme cluster単位で扱い、結合文字やemoji sequenceを途中で分断しない。Ctrl-Wはcursor直前のUnicode whitespaceを削除した後、その前に連続する非whitespace grapheme clusterを削除する。日本語のように空白を含まない文字列では、cursor直前の連続部分全体が対象となる。Ctrl-Uはcursor位置にかかわらずquery全体をclearし、E2の空query状態へ戻す。
+
+EnterとEscには初期リリースではactionを割り当てない。Ctrl-Cで実行中検索をcancelし、DB connectionとlogをcloseして終了する。
 
 fzf や shell TUI との操作感を大きく外さないようにする。
 
@@ -753,6 +765,7 @@ fzf や shell TUI との操作感を大きく外さないようにする。
 ```go
 type Model struct {
     Query         string
+    QueryCursor   int
     Results       []Entry
     Selected      int
     ListOffset    int
@@ -774,15 +787,24 @@ type Model struct {
 
 DB から表示可能件数 + α のみ取得し、文字列として効率的に描画する。
 
-Lip Gloss は以下に限定して使う。
+terminalの既定foreground/backgroundを使用し、文字色と背景色は指定しない。背景がdarkかlightかの判定、ANSI 16色・256色・True Colorのpalette、theme設定は初期リリースへ導入しない。
 
-- 選択行
-- 区切り線
-- status
-- query prompt
-- highlight
+stylingは以下の属性だけに限定する。
 
-過度に複雑な styling は起動速度・描画速度・保守性の観点から避ける。
+- 選択行: reverse
+- 右ペインの見出し語: bold
+- 区切り線、操作案内、scroll indicator: dim
+- status警告、右ペインの検索error: bold
+
+選択行には `>` も表示し、警告とerrorには内容を表す明示的な文言を使用する。reverse、bold、dimが無効なterminalやplain textであっても、色や属性だけに依存せず状態を判別できるようにする。
+
+ANSI stylingを適用した後の文字列長ではなく、装飾を除いたdisplay widthでlayoutを計算する。過度に複雑なstylingは起動速度・描画速度・保守性の観点から避ける。
+
+### 10.6 Mouse
+
+初期リリースではmouse操作に対応せず、Bubble Teaのmouse trackingを有効化しない。click、wheel、hoverのevent handlerやmouse設定は実装しない。
+
+terminal本来のmouseによる文字選択とcopyを妨げず、検索、一覧選択、詳細scroll、辞書切替、終了のすべてをkeyboardだけで操作可能とする。将来mouse対応を追加する場合は、まずright paneのwheel scrollから別途設計する。
 
 ---
 
@@ -975,8 +997,6 @@ max_results = 50
 - DB path
 - default dictionary
 - result limit
-- key bindings
-- theme
 
 初期リリースでは設定項目を増やしすぎない。
 
@@ -1502,6 +1522,18 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - 通常のstatusには現在の辞書名だけを表示する
 - 短い警告中だけstatusを警告文へ置き換え、次の通常操作で辞書名へ戻す
 - 内部検索方式、件数、選択位置、latencyをstatusへ表示しない
+- K2の固定keymapが対応するactionを実行する
+- grapheme clusterを分断せずに挿入、cursor移動、前後削除を行う
+- Ctrl-WがUnicode whitespaceと直前の非whitespace範囲を削除する
+- Ctrl-Uでqueryをclearし、空query状態へ戻る
+- queryを変えないcursor移動とno-op削除で検索を開始しない
+- EnterとEscにactionが割り当てられていない
+- terminal既定のforeground/backgroundを変更しない
+- 選択、見出し、補助表示、警告・errorへ定義した属性だけを適用する
+- ANSI属性を除外したdisplay widthでlayoutする
+- stylingなしでも選択記号と文言で状態を判別できる
+- mouse trackingを有効化せず、mouse event handlerを持たない
+- keyboardだけですべての初期機能を操作できる
 
 ---
 
@@ -1580,12 +1612,6 @@ Telemetry も原則導入しない。
 - 正式プログラム名
 - OSS license
 - repository 名
-
-### TUI
-
-- key binding
-- 色・テーマ
-- mouse support の有無
 
 ### CLI
 
