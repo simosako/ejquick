@@ -497,18 +497,30 @@ TUIはterminalに表示可能な行だけを描画するが、terminalの高さ�
 
 ### 8.4 Prefix 検索
 
-実装候補:
+B-tree index の範囲scanをそのまま使う。実測（英辞郎 2,577,796件）では `ORDER BY headword_norm LIMIT 1000` で約 2ms である。
 
 ```sql
-SELECT id, headword, body
+SELECT id, headword, headword_norm, body
 FROM entries
 WHERE headword_norm >= :lower
   AND headword_norm < :upper
 ORDER BY headword_norm
-LIMIT :limit;
+LIMIT :pool_limit;
 ```
 
-あるいは SQLite の index を確実に利用できる形で `LIKE 'xxx%'` を使用する。
+`:upper` は `:lower` に `U+10FFFF` を連結した文字列とする。`ORDER BY length(...)` のような追加のsort keyをSQLへ入れると範囲内全件のsortが発生し、1文字queryで数十msかかるため使わない。
+
+完全一致は同じindexで取得する。
+
+```sql
+SELECT id, headword, headword_norm, body
+FROM entries
+WHERE headword_norm = :query
+ORDER BY id
+LIMIT :pool_limit;
+```
+
+取得したpoolはアプリケーション側で8.6のPrefix規則（完全一致、短いheadword、辞書順、`id`）へ並べ替え、`max_results` まで採用する。poolの初期値は `min(max(max_results * 4, 100), 500)` とし、実データの測定で調整できる内部定数とする。
 
 実際の query plan は `EXPLAIN QUERY PLAN` で確認する。
 
@@ -518,15 +530,12 @@ LIMIT :limit;
 
 Auto モードでは、最初に Prefix 検索を行い、残りの表示枠を Substring 検索で補う。Substring 検索からは、すでに取得した前方一致候補を除外する。
 
-概念:
-
 ```sql
 SELECT e.id, e.headword, e.headword_norm, e.body
 FROM entries_fts f
 JOIN entries e ON e.id = f.rowid
 WHERE entries_fts MATCH :fts_query
   AND instr(e.headword_norm, :query) > 1
-ORDER BY rank, e.id
 LIMIT :candidate_limit;
 ```
 
@@ -538,9 +547,11 @@ ftsQuery := `"` + strings.ReplaceAll(query, `"`, `""`) + `"`
 
 SQL文字列へ値を連結せず、`:query` と `:fts_query` はどちらもSQL parameterとしてbindする。利用者が入力した `AND`、`OR`、`NOT`、引用符、括弧などはFTS5構文として解釈せず、常に検索対象のliteral文字列として扱う。初期リリースではFTS5 query syntaxを利用者へ公開しない。
 
-`instr(e.headword_norm, :query) > 1` により、正規化済み見出し語にliteralなqueryが実在することを確認すると同時に、先にPrefix検索で取得した完全一致・前方一致候補を除外する。
+`instr(e.headword_norm, :query) > 1` により、正規化済み見出し語にliteralなqueryが実在することを確認すると同時に、先頭一致（一致位置が1）をPrefix検索と区別する。
 
-FTS5の `rank` は最終的な表示順ではなく、アプリケーション側で再rankingする候補poolを絞るためだけに使用する。Prefix検索後の残枠を `remaining` とし、候補poolの初期上限を以下とする。
+FTS5の `rank`（bm25）は使わない。`ORDER BY rank` は一致全件の評価を必要とし、高頻度trigram（例: `ation`、約21万件一致）で約420msかかる。`ORDER BY` 句を付けない `LIMIT` はFTS5のdocid順列挙の打ち切りとなり、同じqueryで約1.4msで完了する。FTS5のdocidは `content_rowid='id'` により `entries.id` と同じ昇順である。
+
+候補poolは8.6のSubstring規則でアプリケーション側へ並べ替える。Prefix検索後の残枠を `remaining` とし、候補poolの初期上限を以下とする。
 
 ```text
 candidate_limit = min(max(remaining * 10, 100), 500)
@@ -578,15 +589,16 @@ Substring 検索:
 
 検索用の `headword_norm` を生成する。
 
-表示用 `headword` は元データの表記を保持し、正規化は行わない。Builder で見出し語から `headword_norm` を生成する処理と、検索アプリで query を正規化する処理には、辞書種別ごとに同一の正規化関数を使用する。検索文字数は正規化後の query に対して数える。
+表示用 `headword` は元データの表記を保持し、正規化は行わない。実データの英辞郎・和英辞郎は全見出し語の先頭に `■`（U+25A0）構造マーカーを持ち、見出し語途中に `■` が現れることはない。このため `headword_norm` 生成時のみ先頭の `■` を除去し、表示用 `headword` には残す。Builder で見出し語から `headword_norm` を生成する処理と、検索アプリで query を正規化する処理には、辞書種別ごとに同一の正規化関数を使用する。検索文字数は正規化後の query に対して数える。
 
 ### 9.1 英和
 
 英和辞書では以下の正規化を行う。
 
-1. 前後空白を除去する
-2. Unicode NFC で正規化する
-3. Unicode Case Folding を適用する
+1. 先頭の `■`（U+25A0）構造マーカーを除去する
+2. 前後空白を除去する
+3. Unicode NFC で正規化する
+4. Unicode Case Folding を適用する
 
 例:
 
@@ -604,9 +616,10 @@ english
 
 和英辞書では以下の正規化を行う。
 
-1. 前後空白を除去する
-2. Unicode NFKC で正規化する
-3. 見出し語に含まれる英字へ Unicode Case Folding を適用する
+1. 先頭の `■`（U+25A0）構造マーカーを除去する
+2. 前後空白を除去する
+3. Unicode NFKC で正規化する
+4. 見出し語に含まれる英字へ Unicode Case Folding を適用する
 
 これにより、全角・半角の英数字、半角・全角カタカナなど、Unicode の互換等価として定義されている表記差を検索上は吸収する。
 

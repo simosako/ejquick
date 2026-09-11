@@ -22,16 +22,23 @@ const Version = "1"
 // language-specific mappings.
 var folder = cases.Fold()
 
+// headwordMarker is the EIJIRO/WAEIJI structural prefix that marks the
+// start of every headword line. It is not part of the searchable text and
+// is stripped before normalization; the display headword keeps it.
+const headwordMarker = "■"
+
 // Normalize returns the normalized search key for a headword or query
 // according to the dictionary type:
 //
-//	eiji: trim spaces, NFC, then Unicode case folding
-//	waei: trim spaces, NFKC, then Unicode case folding
+//	eiji: strip the leading marker, trim spaces, NFC, Unicode case folding
+//	waei: strip the leading marker, trim spaces, NFKC, Unicode case folding
 //
 // NFC/NFKC are applied first so that folding sees canonically equivalent
 // code point sequences in a single form.
 func Normalize(dt dictionary.Type, s string) (string, error) {
 	trimmed := strings.TrimSpace(s)
+	trimmed = strings.TrimPrefix(trimmed, headwordMarker)
+	trimmed = strings.TrimSpace(trimmed)
 	var normalized string
 	switch dt {
 	case dictionary.Eiji:
