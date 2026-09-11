@@ -2,3 +2,4 @@
 # Built artifacts
 *.sqlite3
 /dist/
+/tmp/
