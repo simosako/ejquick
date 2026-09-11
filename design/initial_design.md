@@ -1256,6 +1256,34 @@ Windowsでは検索アプリなどが既存DBを開いていると置換に失�
 
 構築または検査に失敗した場合は完成DBを変更せず、一時DBの削除を試みる。process強制終了などで一時DBが残っても完成DBとしては認識しない。
 
+### 14.8 Progress output
+
+Builderのprogress、警告、error、完了summaryはstderrへ出力し、stdoutは使用しない。stderrがterminalかredirect先かによって形式を変えず、すべてnewlineで終了する固定行として出力する。carriage returnによる行上書き、ANSI styling、spinner、progress bar、進捗率、ETAは使用しない。
+
+各phaseの開始時と完了時に `start` / `done` を表示する。TXTの読込み・parse・INSERT中は、長時間無表示になることを避けるため、10万物理行ごとに累計の物理行数、登録件数、skip件数を追加表示する。入力完了時は10万行の境界かどうかにかかわらず最終値を表示する。FTS rebuildやVACUUMのように途中件数を取得できないphaseは開始と完了だけを表示する。
+
+例:
+
+```text
+Reading: start
+Reading: lines=100000 entries=99999 skipped=1
+Reading: done lines=2389908 entries=2389907 skipped=1
+B-tree index: start
+B-tree index: done
+FTS build: start
+FTS build: done
+Validation: start
+Validation: done
+Source lines: 2389908
+Entries: 2389907
+Skipped: 1
+Database: 1.2 GiB
+Compacted: no
+Elapsed: 2m34s
+```
+
+完了summaryには物理行数、登録件数、skip件数、完成DB size、経過時間、compact有無を含める。`--compact` を指定した場合だけVACUUM phaseの開始・完了も表示する。初期リリースではprogressの頻度・形式を変更するoptionや `--quiet` optionを設けない。
+
 ---
 
 ## 15. Go package 構成案
@@ -1461,18 +1489,7 @@ skipした行の内容全体は通常の進捗表示へ出力せず、行番号�
 ただし、利用者に知らせるべきエラーや警告はTUI上にも表示する。current requestの検索errorは右ペインへ表示し、その他の短い警告はstatus領域へ表示する。
 TUI のデバッグログは明示的なオプションで有効化する。
 
-Builder では、途中経過を画面に表示する。
-
-例:
-
-```text
-Reading:   2,100,000 entries
-Inserted:  2,100,000
-Skipped:   1 malformed line
-FTS build: done
-Database:  1.2 GiB
-Elapsed:   ...
-```
+Builderのprogress、警告、error、完了summaryは14.8の固定行形式でstderrへ出力する。
 
 ---
 
@@ -1561,7 +1578,7 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 
 `--compact` の有無でDB size、build時間、最大RSS、peak disk使用量を比較し、配布用buildでの利用判断に使う。
 
-### 21.5 Builder publication
+### 21.5 Builder
 
 以下を各対応OSで検証する。
 
@@ -1574,6 +1591,13 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - `--compact` ではVACUUMを実行し、完了DBの `compacted` が `true` になる
 - `--compact` 中の失敗で一時DBを破棄し、既存DBを維持する
 - 両方のbuildでANALYZE、PRAGMA optimize、read-only最終検査を実行する
+- progress、警告、error、完了summaryをstderrだけへ出力し、stdoutを空に保つ
+- TXT処理中は10万物理行ごと、および入力完了時に累計件数を出力する
+- 各phaseをnewlineで終了する固定行のstart / doneとして出力する
+- terminalとredirect先で同じ形式を使用し、carriage returnやANSI sequenceを出力しない
+- 途中件数を取得できないphaseでは割合やETAを表示しない
+- 完了summaryに物理行数、登録件数、skip件数、DB size、経過時間、compact有無を含める
+- `--compact` を指定した場合だけVACUUM phaseを表示する
 
 ### 21.6 TUI
 
@@ -1723,7 +1747,6 @@ Telemetry も原則導入しない。
 
 ### Builder
 
-- progress UI
 - incremental rebuild の有無
 
 ---
