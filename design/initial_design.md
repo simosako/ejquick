@@ -1029,21 +1029,23 @@ TOML
 
 ### 13.2 配置場所
 
-Linuxでの基本path:
+既定config fileはGo標準libraryの `os.UserConfigDir()` が返すdirectoryに `ejquick/config.toml` を加え、`filepath.Join` で組み立てる。
 
 ```text
-~/.config/ejquick/config.toml
+Linux
+  $XDG_CONFIG_HOME/ejquick/config.toml
+  XDG_CONFIG_HOME未設定時: $HOME/.config/ejquick/config.toml
+
+macOS
+  $HOME/Library/Application Support/ejquick/config.toml
+
+Windows
+  %AppData%\ejquick\config.toml
 ```
 
-Windows では XDG 相当の扱いをどうするかを実装時に決定する。
+OSごとの環境変数や慣習は `os.UserConfigDir()` に従い、独自のfallbackや複数pathの探索は実装しない。`os.UserConfigDir()` がerrorを返した場合はconfig pathを推測せず、起動errorとしてstderrとlog fileへ理由を出力する。
 
-候補:
-
-- Go の `os.UserConfigDir()`
-- XDG_CONFIG_HOME を尊重
-- Windows は `%AppData%`
-
-OS ごとの慣習に従う。ただし、TUI/CLIプログラム起動時に -c オプションで、独自の位置、ファイル名で保存されているコンフィグファイルを指定して読み込ませることを可能にする。
+`-c, --config <path>` を指定した場合はその1 fileだけを使用し、`os.UserConfigDir()` の呼出しや既定pathの探索を行わない。指定pathと既定configをmergeせず、指定fileを読み込めない場合は起動errorとする。
 
 ### 13.3 設定例
 
@@ -1677,6 +1679,14 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - 0件時はstdoutが空で、error時は診断がstderrだけに出る
 - `--help` と `--version` がconfigとDBなしで0を返す
 - TUIのCtrl-Cは0、TUI開始前errorは2を返す
+
+### 21.8 Configuration
+
+- 各対象OSで `os.UserConfigDir()` の結果に `ejquick/config.toml` を加えたpathを使用する
+- Linuxで `XDG_CONFIG_HOME` の設定時と未設定時に期待するpathを使用する
+- `--config` 指定時は `os.UserConfigDir()` を呼ばず、指定した1 fileだけを使用する
+- 指定configを既定configとmergeしない
+- `os.UserConfigDir()` のerrorと指定configの読込errorを起動errorにする
 
 ---
 
