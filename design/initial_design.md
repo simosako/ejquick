@@ -748,12 +748,14 @@ fzf や shell TUI との操作感を大きく外さないようにする。
 
 ```go
 type Model struct {
-    Query       string
-    Results     []Entry
-    Selected    int
-    Width       int
-    Height      int
-    Dictionary  DictionaryType
+    Query        string
+    Results      []Entry
+    Selected     int
+    Width        int
+    Height       int
+    Dictionary   DictionaryType
+    RequestID    uint64
+    CancelSearch context.CancelFunc
 }
 ```
 
@@ -799,31 +801,31 @@ engl
 search("engl")
 ```
 
-Web UI 的な大きな debounce は原則入れない。
-
-SQLite + index + LIMIT で十分高速であれば、入力直後に検索を行う。
+query内容が変化した入力はdebounceせず、直後に検索を行う。選択移動や画面resizeなど、queryを変更しないeventでは検索を開始しない。
 
 ### 11.2 非同期検索
 
 DB query を Bubble Tea の Update 内で長時間ブロックさせない。
 
-検索は `tea.Cmd` を利用する構成を想定する。
+検索は `tea.Cmd` を利用し、Repositoryまで `context.Context` を渡す。新しい検索を開始するたびに、実行中の検索contextをcancelする。
 
 概念:
 
 ```go
-func searchCmd(query string) tea.Cmd {
+func searchCmd(ctx context.Context, requestID uint64, query string) tea.Cmd {
     return func() tea.Msg {
-        result, err := repository.Search(query)
+        result, err := repository.Search(ctx, query)
 
         return SearchResultMsg{
-            Query:  query,
-            Result: result,
-            Err:    err,
+            RequestID: requestID,
+            Result:    result,
+            Err:       err,
         }
     }
 }
 ```
+
+Repositoryは `database/sql` の `QueryContext` を使用する。Auto検索内のPrefix queryと、必要な場合に続けて実行するFTS5 queryには同じcontextを渡し、各段階でcancelを反映する。
 
 ### 11.3 stale result の破棄
 
@@ -839,30 +841,31 @@ search("eng")
 
 `search("e")` が最後に返る可能性がある。
 
-そのため検索結果 message に query または sequence number を保持する。
+cancelは不要になったSQLの処理量を減らすために使用するが、結果反映の正しさはcancelの成否に依存させない。SQLがすでに完了し、結果messageがqueueへ入った後ではcancelできないため、単調増加するrequest IDを必ず併用する。
 
 ```go
-if msg.Query != m.Query {
-    // 古い検索結果
+if msg.RequestID != m.RequestID {
+    // Ignore stale results, including stale errors.
     return m, nil
 }
 ```
 
-より厳密には monotonic な request ID / generation ID を用いてもよい。
+新しい検索を開始する処理は以下の順序とする。
+
+1. modelのrequest IDをincrementし、新しいIDをcurrentとする
+2. 前回の `CancelSearch` があれば呼び出す
+3. 新しいcontextと `CancelFunc` を作成してmodelへ保持する
+4. request IDとcontextを渡して `tea.Cmd` を開始する
+
+query文字列そのものによる一致判定は使用しない。例えば `a` → `ab` → `a` と入力が変化した場合、最初と最後の `a` を異なるrequestとして識別する必要がある。
+
+旧requestの結果とエラーは、完了時点やcancel結果にかかわらず破棄する。`context.Canceled` は通常の制御フローであり、statusやlogへ利用者向けエラーとして表示しない。辞書切替、queryの空文字化、アプリケーション終了時にもcurrent requestを無効化して実行中検索をcancelする。
 
 ### 11.4 debounce
 
-初期実装では debounce を入れない。
+初期リリースではdebounceを入れず、待機timerや設定項目も設けない。queryが変化した同じ `Update` 処理内でrequest IDを更新し、旧contextをcancelして、新しい検索 `tea.Cmd` を返す。fzfのような即応感を優先する。
 
-性能問題が出た場合のみ、
-
-```text
-20〜50 ms
-```
-
-程度の短い debounce を検討する。
-
-fzf のような即応感を優先する。
+実データbenchmarkでcancel頻度やDB負荷が問題になった場合のみ、将来の設計変更としてSubstring検索への短いdebounceを再検討する。初期実装へ未使用のdebounce機構は入れない。
 
 ---
 
@@ -1262,7 +1265,7 @@ HTTP server を前提にした architecture にはしない。
 
 DB connection pool を大きくする必要はない。
 
-同時に大量 query を発行しないよう stale query 制御を行う。
+新しい検索の開始時に前回のcontextをcancelし、request IDが一致する最新結果だけを反映する。DB driverによるcancel完了が遅れた場合でも、stale resultをTUIへ反映しない。
 
 ### 17.4 Read-only
 
@@ -1406,6 +1409,13 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - `max_results` の既定値、および1・500の境界値
 - 0、負数、501以上のresult limitを拒否すること
 - terminal resizeで検索結果集合が変化しないこと
+- 新しい検索開始時に前回のcontextがcancelされること
+- cancel前に完了済みの旧requestが後から到着しても反映されないこと
+- `a` → `ab` → `a` のように同じqueryへ戻ってもrequest IDで旧結果を区別すること
+- stale requestの結果、エラー、`context.Canceled`をTUIへ表示しないこと
+- `modernc.org/sqlite` の `QueryContext` で実行中queryを中断できること
+- query変更と同じ `Update` で待機timerなしに検索commandを返すこと
+- queryを変更しないeventでは検索commandを返さないこと
 - 1文字
 - 2文字
 - 3文字
