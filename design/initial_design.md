@@ -78,7 +78,9 @@ Go を使用する。
 
 原則として Pure Go で実装し、OS ごとのネイティブ依存を極力避ける。
 
-ただし SQLite / FTS5 の利用方法については、採用する Go SQLite ドライバのビルド方式と FTS5 対応状況を確認した上で最終決定する。
+SQLite driver には CGo を必要としない `modernc.org/sqlite` を採用し、検索アプリと DB Builder の両方で同じ driver を使用する。
+
+正式実装へ進む前に、FTS5 trigram、external content table、実行中 query の context cancellation、read-only open が動作することを smoke test で確認する。また、`CGO_ENABLED=0` で配布対象の OS / architecture を build できることを継続的に検証する。
 
 ### 3.3 TUI ライブラリ
 
@@ -1373,8 +1375,6 @@ Telemetry も原則導入しない。
 
 ### SQLite
 
-- Go SQLite driver
-- Pure Go と FTS5 の具体的な実現方式
 - FTS5 tokenizer 設定
 - external content table の構成
 - raw 列を保持するか
@@ -1424,6 +1424,8 @@ Telemetry も原則導入しない。
 - entries table
 - B-tree index
 - FTS5 trigram
+- `modernc.org/sqlite` の機能 smoke test
+- `CGO_ENABLED=0` での cross build
 - benchmark
 
 目的:
@@ -1570,6 +1572,8 @@ TUI
 
 Storage
   SQLite
+  modernc.org/sqlite
+  CGo disabled
 
 Prefix search
   B-tree index
