@@ -178,7 +178,7 @@ ejquick-build
 役割:
 
 - TXT ファイル読み込み
-- Shift_JIS から Unicode / UTF-8 への変換
+- CP932（Windows-31J）から Unicode / UTF-8 への変換
 - 英辞郎 / 和英辞郎フォーマットのパース
 - 正規化用データ生成
 - SQLite DB 作成
@@ -209,12 +209,14 @@ BOOTH で購入した TXT ファイルをユーザー自身が指定して変換
 
 ### 6.2 文字コード
 
-元 TXT は Shift_JIS 系の文字コードを前提とする。
+元 TXT の文字コードは CP932（Windows-31J）として固定する。汎用的な文字コード自動判定や、入力文字コードを変更する option は初期リリースでは提供しない。
+
+CP932 として不正な byte sequence を検出した場合は、Unicode replacement character へ置換して処理を継続せず、入力行番号と byte offset を報告して変換を停止する。
 
 DB Builder 内で以下を行う。
 
 ```text
-Shift_JIS
+CP932 (Windows-31J)
    ↓
 Unicode
    ↓
@@ -227,7 +229,21 @@ SQLite
 
 Go 内部では UTF-8 を使用する。
 
-### 6.3 英辞郎と和英辞郎の分離
+### 6.3 行形式と異常行
+
+英辞郎・和英辞郎ともに、1物理行を1エントリとして扱う。CRLF を除去した後、ASCII文字列 ` : ` がちょうど1個存在し、その前後がどちらも空でない行を正常とする。
+
+```text
+headword : body
+```
+
+区切りの欠落、複数の区切り、空の見出し語、空の本文は malformed line とする。malformed line はDBへ登録せず、入力行番号と理由を警告として報告して変換を継続する。今回確認した和英辞郎の ` : ` が2個存在する行も、この規則によりskipする。
+
+decode error は行構造を安全に解釈できない入力破損として変換を停止する。SQLite error、disk full、FTS整合性エラーも停止対象とする。見出し語の重複は正常データであり、skipせずすべて保持する。
+
+Builder は読込行数、登録件数、skip件数を完了時に表示し、DB metadata にも保存する。skipが発生しても、1件以上の正常なエントリを登録でき、その他の完成条件を満たしていればbuildは成功とする。
+
+### 6.4 英辞郎と和英辞郎の分離
 
 英和・和英は利用目的、検索キー、将来的な追加属性が異なる可能性があるため、DB file を分離する。
 
@@ -274,30 +290,31 @@ waei.sqlite3
 
 ### 7.2 英辞郎テーブル案
 
-初期案:
+初期 schema:
 
 ```sql
 CREATE TABLE entries (
     id            INTEGER PRIMARY KEY,
     headword      TEXT NOT NULL,
     headword_norm TEXT NOT NULL,
-    body          TEXT NOT NULL,
-    raw           TEXT
+    body          TEXT NOT NULL
 );
 ```
 
 想定:
 
+- `id`
+  - 1始まりの元TXT物理行番号
 - `headword`
   - 表示用見出し語
 - `headword_norm`
   - 検索用に正規化した見出し語
 - `body`
   - 語義・説明
-- `raw`
-  - 元行を保持する必要がある場合のみ利用
 
-`raw` を常に保存するかは容量と保守性を見て決定する。
+元行を重複保存する `raw` 列は設けない。正常行の `id` には連番を振り直さず、Builder が元TXTの物理行番号を明示的にINSERTする。malformed lineをskipした場合は、その行番号がIDの欠番として残る。
+
+これにより追加列なしでDBエントリと元TXTの行を対応付けられる。同一の元ファイルから再構築した場合はIDも安定する。SQLiteの `INTEGER PRIMARY KEY`、B-tree index、FTS5 rowidはいずれも欠番を許容するため、検索処理への影響はない。
 
 ### 7.3 和英辞郎テーブル案
 
@@ -308,10 +325,11 @@ CREATE TABLE entries (
     id            INTEGER PRIMARY KEY,
     headword      TEXT NOT NULL,
     headword_norm TEXT NOT NULL,
-    body          TEXT NOT NULL,
-    raw           TEXT
+    body          TEXT NOT NULL
 );
 ```
+
+`id` と元TXT物理行番号の対応、および `raw` を保持しない方針は英辞郎と同じとする。
 
 ### 7.4 B-tree INDEX
 
@@ -336,11 +354,13 @@ USING fts5(
     headword_norm,
     content='entries',
     content_rowid='id',
-    tokenize='trigram'
+    tokenize='trigram case_sensitive 1 remove_diacritics 0'
 );
 ```
 
-FTS5 trigram tokenizer の採用を第一候補とする。
+FTS5 trigram tokenizer を `case_sensitive 1 remove_diacritics 0` で使用する。大文字小文字を利用者に区別させる意図ではなく、Builderと検索queryへ適用済みの辞書種別ごとの正規化結果を、FTS5側でさらに変換しないための設定である。
+
+大文字小文字の吸収はUnicode Case Folding、アクセントを区別するかどうかはNFC/NFKCを含むアプリケーション側の正規化仕様で一元管理する。これにより、B-treeによる完全一致・Prefix検索とFTS5によるSubstring検索で文字の同一性を揃え、SQLite内部のcase foldingへ依存しない。
 
 初期リリースでは部分一致検索の対象を見出し語に限定し、検索用に正規化した `headword_norm` のみを FTS index へ登録する。`body` の全文検索は初期リリースの対象外とし、将来追加する場合は見出し語検索と分離した検索モードおよび index として設計する。
 
@@ -351,6 +371,8 @@ INSERT INTO entries_fts(entries_fts) VALUES('rebuild');
 ```
 
 完成後のDBは検索アプリから read-only で使用し、`entries` を更新しないため、初期リリースでは FTS 同期用の INSERT / UPDATE / DELETE trigger を作成しない。Builder は完成前に FTS5 integrity-check を実行し、`entries` と FTS index の整合性を確認する。
+
+`entries_fts` のrowidには `content_rowid='id'` により元TXT物理行番号と同じ値を使用する。IDに欠番があってもFTS検索と `entries` へのJOINには影響しない。
 
 理由:
 
@@ -955,7 +977,7 @@ ejquick-build \
 ```text
 TXT
  ↓
-encoding detection / Shift_JIS decode
+strict CP932 decode
  ↓
 line reader
  ↓
@@ -1046,7 +1068,9 @@ source_version
 source_filename
 build_time
 builder_version
+source_line_count
 entry_count
+skipped_entry_count
 encoding
 normalization_version
 fts_version
@@ -1232,14 +1256,13 @@ Create it with:
 
 変換時には以下を区別する。
 
-- decode error
-- malformed line
-- parse error
-- SQLite error
-- disk full
-- duplicate / unexpected data
+- decode error: 変換を停止する
+- malformed line / parse error: 該当行をskipし、行番号と理由を警告する
+- SQLite error / disk full: 変換を停止する
+- duplicate headword: 正常データとして保持する
+- その他の unexpected data: 安全に行単位で分離できる場合のみskipし、それ以外は停止する
 
-大量データ処理なので、異常行1件ですべて停止するか、skip + report にするかを指定可能にすることを検討する。
+skipした行の内容全体は通常の進捗表示へ出力せず、行番号と理由のみを表示する。完了時にskip件数を明示し、DB metadata の `source_line_count`、`entry_count`、`skipped_entry_count` が一致することを検査する。
 
 ---
 
@@ -1257,6 +1280,7 @@ Builder では、途中経過を画面に表示する。
 ```text
 Reading:   2,100,000 entries
 Inserted:  2,100,000
+Skipped:   1 malformed line
 FTS build: done
 Database:  1.2 GiB
 Elapsed:   ...
@@ -1273,6 +1297,12 @@ Elapsed:   ...
 ただし実データを OSS repository に含めない。
 
 重要 : テストデータはライセンス上問題のない人工データを使用する。
+
+fixture には CP932 固有文字、CRLF、不正な byte sequence を含む人工データを用意し、正常な decode と異常位置の報告を検証する。
+
+区切りの欠落、複数の区切り、空の見出し語、空の本文を含む人工データについて、該当行だけがskipされ、行番号・理由・集計値が正しく報告されることを検証する。重複見出し語はすべて保持されることも検証する。
+
+登録された `entries.id` が元TXTの物理行番号と一致し、skipした行がIDの欠番として残ることを検証する。
 
 ### 21.2 Normalization
 
@@ -1294,6 +1324,8 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - prefix
 - substring
 - Unicode
+- B-treeとFTS5でのcase folding結果の一致
+- アクセント付き文字とアクセントなし文字の区別
 - 1文字
 - 2文字
 - 3文字
@@ -1389,8 +1421,6 @@ Telemetry も原則導入しない。
 
 ### SQLite
 
-- FTS5 tokenizer 設定
-- raw 列を保持するか
 - page size / journal mode 等の PRAGMA
 
 ### 検索
@@ -1419,8 +1449,6 @@ Telemetry も原則導入しない。
 
 ### Builder
 
-- source TXT format の厳密な parser
-- malformed line の扱い
 - VACUUM を default にするか
 - progress UI
 - incremental rebuild の有無
@@ -1432,7 +1460,7 @@ Telemetry も原則導入しない。
 ### Phase 1: DB Builder prototype
 
 - TXT reader
-- Shift_JIS → UTF-8
+- CP932（Windows-31J）→ UTF-8
 - parser
 - entries table
 - B-tree index
@@ -1593,7 +1621,7 @@ Prefix search
 
 Substring search
   SQLite FTS5
-  trigram tokenizer
+  trigram tokenizer (case_sensitive=1, remove_diacritics=0)
   headword_norm only
 
 Normalization
@@ -1604,7 +1632,7 @@ Configuration
   TOML
 
 Source encoding
-  Shift_JIS
+  CP932 (Windows-31J)
 
 Internal encoding
   UTF-8
