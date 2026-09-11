@@ -467,8 +467,6 @@ Autoモードでは入力文字数に応じて内部検索方式を自動的に�
 
 内部実装では、まず B-tree index で前方一致候補を検索し、検索結果の上限に空きがある場合のみ、FTS5 で前方一致以外の部分一致候補を補う。前方一致候補だけで上限に達した場合、その他の部分一致候補は取得しない。
 
-TUIのstatus領域には、選択モードではなく現在のqueryに対する実効検索方式としてPrefixまたはSubstringを表示する。
-
 ### 8.3 検索件数
 
 インクリメンタル検索では全件を取得せず、`max_results` を検索結果の上限とする。既定値は50、許容範囲は1〜500とする。
@@ -668,13 +666,13 @@ Englishman          |
 
 ```text
 Type to search
-Tab: switch dictionary
+Tab: switch dictionary (when both are available)
 Ctrl-C: quit
 ```
 
-操作案内は検索結果ではなく、選択や詳細表示の対象にしない。実際のkey bindingと食い違わないよう、表示文字列はkey bindingの定義と同じ情報から生成する。
+操作案内は検索結果ではなく、選択や詳細表示の対象にしない。実際のkey bindingと食い違わないよう、表示文字列はkey bindingの定義と同じ情報から生成する。利用可能な辞書が1つだけの場合はTabの案内を表示しない。
 
-入力をすべて削除してqueryが空になった場合はrequest IDを更新し、実行中検索をcancelし、検索結果、選択位置、loading状態、検索errorをclearする。`Selected` は選択なしを表す値へ戻す。その後に到着した旧requestのmessageはrequest IDにより破棄する。
+入力をすべて削除してqueryが空になった場合はrequest IDを更新し、実行中検索をcancelし、検索結果、選択位置、一覧scroll位置、詳細scroll位置、検索errorをclearする。`Selected` は選択なしを表す値へ戻す。その後に到着した旧requestのmessageはrequest IDにより破棄する。
 
 ### 10.2 TUI 画面構成
 
@@ -694,9 +692,13 @@ status
 
 左ペインには検索結果の見出し語一覧を表示し、選択行を強調する。右ペインには選択中エントリの見出し語と本文を表示する。利用者がUp / DownまたはCtrl-P / Ctrl-Nで選択を移動すると、右ペインを即座に更新する。
 
+current requestの新しい検索結果を反映する際は、置換前に選択中エントリの `id` を取得する。新しい結果内に同じ `id` が存在すればそのエントリを選択し続け、存在しなければ先頭を選択する。結果が0件の場合は選択なしとする。配列indexではなく一意な `id` で追跡し、同じ見出し語を持つ重複エントリも区別する。
+
+選択を維持した結果、その行が左ペインの表示範囲外にある場合は、一覧scroll位置を必要最小限だけ移動して選択行を表示範囲内へ入れる。選択行がすでに表示範囲内なら一覧scroll位置を変更しない。新しい結果の反映時は、選択IDを維持できた場合も右ペインの詳細scroll位置を先頭へ戻す。
+
 検索結果には本文も含まれているため、選択移動時にDB queryや `tea.Cmd` は発行しない。`Enter`による詳細画面への遷移は設けず、検索入力へfocusを維持したまま一覧を移動できるようにする。
 
-queryが空の場合は左ペインを空にし、右ペインへ操作案内を表示する。queryが空でなく検索結果が0件の場合は、左ペインを空にし、右ペインへ該当結果がないことを表示する。
+queryが空の場合は左ペインを空にし、右ペインへ操作案内を表示する。current requestの検索errorがある場合は左右の結果を空にし、右ペインへ短いエラー内容を表示する。queryが空でなく検索errorもなく検索結果が0件の場合は、左ペインを空にし、右ペインへ該当結果がないことを表示する。
 
 ペイン領域の幅を `pane_width`、中央の区切りを1 columnとして、左右の幅を以下のように計算する。
 
@@ -707,13 +709,29 @@ right_width = pane_width - 1 - left_width
 
 左ペインは利用可能幅のおよそ1/3とし、最小24 columns、最大50 columnsに制限する。右ペインには中央区切りを除いた残りすべてを割り当て、長い本文の表示を優先する。statusとquery入力欄はペイン分割の下でterminal全幅を使用する。
 
+通常時のstatusは現在の辞書名だけを `EIJI` または `WAEI` と表示する。Auto、内部検索方式、取得件数、選択位置、検索latency、DB path、request IDは表示しない。検索latencyなどの診断情報はdebug logで確認する。
+
+DB fallbackや利用できない辞書へのTab操作など、利用者へ伝えるべき短い警告がある場合だけ通常の辞書名を警告文へ置き換える。警告は次の通常操作でclearし、現在の辞書名表示へ戻す。current requestの検索errorはstatusではなく右ペインへ表示し、右ペインのscroll indicatorはstatusとは別に扱う。
+
 左ペインに収まらない見出し語は末尾をellipsisで省略し、完全な見出し語は右ペイン上部に表示する。幅の計算と切り詰めはbyte数やrune数ではなくterminal上のdisplay widthを基準とし、全角文字や結合文字を途中で分断しない。ANSI stylingによる制御sequenceは表示幅へ含めない。
 
 terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せず、terminalが狭いことと必要な最小幅を示す警告画面を表示する。query、検索結果、選択位置はmodel内に保持し、80 columns以上へ戻った際に同じ状態で2ペイン表示を復元する。resizeだけではDB queryを再実行しない。
 
+右ペインの本文はペイン幅に合わせて折り返し、表示高を超える場合はPageUp / PageDownで1ページずつscrollする。1回の移動量は表示行数から1行を引いた値とし、前後のページに1行の重なりを残す。先頭と末尾を超えないようscroll位置をclampする。
+
+選択項目を変更した場合、新しい検索結果を反映した場合、またはqueryを空にした場合は、詳細scroll位置を先頭へ戻す。resize時は新しい右ペイン幅で本文を再度折り返し、現在のscroll位置を有効範囲へclampする。
+
+右ペインの下端には、本文が表示範囲を超える場合だけ現在位置と総行数が分かるscroll indicatorを表示する。PageUp / PageDownではqueryを変更せず、DB queryや `tea.Cmd` を発行せず、検索入力のfocusも維持する。
+
 ### 10.3 キー操作案
 
 未確定だが以下を候補とする。
+
+英和・和英の両DBが利用可能な場合は、Tabで辞書をtoggleする。切替時はrequest IDをincrementして実行中検索をcancelし、query、検索結果、選択位置、一覧scroll位置、詳細scroll位置、検索errorをすべてclearする。切替直後はDB検索を行わず、右ペインに操作案内を表示する。
+
+利用可能なDBが1つだけの場合はTabを無効化する。Tabが押されても辞書や検索状態を変更せず、他方の辞書が利用できないことをstatusへ短く表示する。起動後にDB fileが追加されても自動検出せず、次回起動時に再検査する。
+
+検索入力のfocusは維持し、利用者は切替先の辞書で新しいqueryを入力する。statusには現在の辞書を常時表示する。
 
 | Key | Action |
 |---|---|
@@ -721,8 +739,10 @@ terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せ�
 | Backspace | query 削除 / 即検索 |
 | Up / Ctrl-P | 前候補 |
 | Down / Ctrl-N | 次候補 |
+| PageUp | 右ペインを1ページ上へscroll |
+| PageDown | 右ペインを1ページ下へscroll |
 | Ctrl-C | 終了 |
-| Tab | 英和 / 和英切替候補 |
+| Tab | 英和 / 和英辞書を切替し、検索状態をclear |
 
 fzf や shell TUI との操作感を大きく外さないようにする。
 
@@ -732,14 +752,19 @@ fzf や shell TUI との操作感を大きく外さないようにする。
 
 ```go
 type Model struct {
-    Query        string
-    Results      []Entry
-    Selected     int
-    Width        int
-    Height       int
-    Dictionary   DictionaryType
-    RequestID    uint64
-    CancelSearch context.CancelFunc
+    Query         string
+    Results       []Entry
+    Selected      int
+    ListOffset    int
+    DetailOffset  int
+    Width         int
+    Height        int
+    Dictionary    DictionaryType
+    Available     map[DictionaryType]bool
+    RequestID     uint64
+    CancelSearch  context.CancelFunc
+    SearchError   string
+    StatusWarning string
 }
 ```
 
@@ -811,6 +836,10 @@ func searchCmd(ctx context.Context, requestID uint64, query string) tea.Cmd {
 
 Repositoryは `database/sql` の `QueryContext` を使用する。Auto検索内のPrefix queryと、必要な場合に続けて実行するFTS5 queryには同じcontextを渡し、各段階でcancelを反映する。
 
+空でないqueryが別の空でないqueryへ変化した場合は、既存の検索errorをclearする。前回検索が成功していれば、新しい検索結果が返るまで現在の検索結果、選択位置、一覧scroll位置、詳細scroll位置をそのまま表示する。dim表示、spinner、`Searching...`などの追加表示は行わず、loading状態もmodelへ追加しない。query入力だけを即時更新する。
+
+検索待ちの間も左の選択移動と右のscrollを通常どおり受け付ける。current requestの結果が返った時点でN2の選択維持規則に従って新結果へ置き換える。辞書切替時は別辞書の結果を表示し続けず、結果と選択・scroll位置を即座にclearする。
+
 ### 11.3 stale result の破棄
 
 高速入力時には検索結果の戻り順が query 順と一致しない可能性がある。
@@ -845,6 +874,10 @@ query文字列そのものによる一致判定は使用しない。例えば `a
 
 旧requestの結果とエラーは、完了時点やcancel結果にかかわらず破棄する。`context.Canceled` は通常の制御フローであり、statusやlogへ利用者向けエラーとして表示しない。辞書切替、queryの空文字化、アプリケーション終了時にもcurrent requestを無効化して実行中検索をcancelする。
 
+current requestの結果messageを処理する場合も、最初に `context.Canceled` を判定する。それ以外の検索errorの場合は、現在のqueryを保持したまま検索結果、選択位置、一覧scroll位置、詳細scroll位置をclearし、右ペインへ利用者向けの短いエラー内容を表示する。詳細なerrorは辞書種別とrequest IDを付けてlog fileへ一度だけ記録する。
+
+検索errorでTUIを終了せず、次のquery変更または辞書切替で通常の検索を再試行する。次の検索開始時に画面上の検索errorをclearし、成功結果を受け取った場合も検索errorをclearしてから結果を反映する。
+
 ### 11.4 debounce
 
 初期リリースではdebounceを入れず、待機timerや設定項目も設けない。queryが変化した同じ `Update` 処理内でrequest IDを更新し、旧contextをcancelして、新しい検索 `tea.Cmd` を返す。fzfのような即応感を優先する。
@@ -875,17 +908,7 @@ ejquick --eiji english
 ejquick --waei 英語
 ```
 
-prefix:
-
-```bash
-ejquick --prefix eng
-```
-
-substring:
-
-```bash
-ejquick --substring language
-```
+CLI検索もTUIと同じAuto検索のみを使用する。初期リリースでは `--prefix`、`--substring` などの検索方式を選択するoptionを設けない。
 
 標準出力へ出せることで以下と組み合わせられる。
 
@@ -944,6 +967,8 @@ max_results = 50
 ```
 
 `search.max_results` を省略した場合は50を使用する。1〜500の範囲外は起動時の設定エラーとし、暗黙に丸めない。
+
+`search.default_dictionary` は `eiji` または `waei` とし、それ以外は設定エラーとする。指定した既定辞書が利用できない場合のfallbackは19.1の規則に従う。
 
 候補項目:
 
@@ -1285,14 +1310,22 @@ FTS5 index により DB ファイルは TXT より大きくなる可能性が高
 
 ### 19.1 Search app
 
-起動時に以下を確認する。
+起動時に英和・和英DBを独立して検査する。
 
 - config file
-- DB path
-- DB open
+- 各DB path
+- read-only DB open
 - schema version
+- dictionary type
+- normalization version
 - required table
-- FTS5 availability
+- FTS5 tableの存在とread-only smoke query
+
+設定された既定辞書が利用可能なら、その辞書を選択して起動する。既定辞書が利用できず他方が正常な場合は、正常な辞書へfallbackしてTUIを起動し、利用できなかった辞書と理由をstatusおよびlog fileへ記録する。
+
+利用可能なDBが1つだけの場合も検索機能を提供し、辞書切替を無効化する。両DBが利用できない場合のみTUI表示前にエラー終了し、各DBの失敗理由とBuilderによる作成方法をstderrおよびlog fileへ表示する。
+
+起動時に確定した利用可能DBの集合はsession中に変更しない。DB fileを追加・置換した場合は、検索アプリを再起動して検査し直す。
 
 問題がある場合は、短く明確なエラーを表示する。
 
@@ -1305,6 +1338,8 @@ eiji database not found:
 Create it with:
   ejquick-build --type eiji ...
 ```
+
+起動後の検索errorでは、request IDがcurrentであることと `context.Canceled` でないことを確認する。current requestのerrorだけを右ペインへ短く表示し、詳細をlog fileへ記録する。前回の検索結果はclearするがqueryは維持し、TUIは継続する。
 
 ### 19.2 Builder
 
@@ -1324,7 +1359,7 @@ skipした行の内容全体は通常の進捗表示へ出力せず、行番号�
 
 起動失敗のような起動前のエラーはstderrに出力する。また、log fileにも出力する。
 そのほかログは、log fileに追記する。(TUI の stdout をログで汚さない)
-ただし、ユーザーに知らせたほうが良いエラーや警告に関してはTUI上に表示する（TUI上にステータスを表示する領域を作り、そこにエラー・警告を出す）
+ただし、利用者に知らせるべきエラーや警告はTUI上にも表示する。current requestの検索errorは右ペインへ表示し、その他の短い警告はstatus領域へ表示する。
 TUI のデバッグログは明示的なオプションで有効化する。
 
 Builder では、途中経過を画面に表示する。
@@ -1393,6 +1428,10 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - cancel前に完了済みの旧requestが後から到着しても反映されないこと
 - `a` → `ab` → `a` のように同じqueryへ戻ってもrequest IDで旧結果を区別すること
 - stale requestの結果、エラー、`context.Canceled`をTUIへ表示しないこと
+- current requestの検索errorで結果、選択、左右scroll位置をclearすること
+- current requestの検索errorを右ペインへ表示し、queryとTUIを維持すること
+- 検索errorの詳細を一度だけlog fileへ記録すること
+- 次の検索開始時と成功時に以前の検索errorをclearすること
 - `modernc.org/sqlite` の `QueryContext` で実行中queryを中断できること
 - query変更と同じ `Update` で待機timerなしに検索commandを返すこと
 - queryを変更しないeventでは検索commandを返さないこと
@@ -1400,7 +1439,7 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - 2文字
 - 3文字
 - 起動時とquery全削除時にDB検索を行わず、静的な操作案内を表示すること
-- empty queryで結果、選択、loading状態、検索errorがclearされること
+- empty queryで結果、選択、scroll位置、検索errorがclearされること
 - 操作案内を検索結果として選択できないこと
 
 ### 21.4 Performance
@@ -1437,11 +1476,32 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - 選択移動でDB queryを発行せず、右ペインだけを更新する
 - queryが空の場合は右ペインへ操作案内を表示する
 - 検索結果が0件の場合は右ペインへ該当結果がないことを表示する
+- current requestの検索errorでは前回結果をclearし、右ペインへ短いエラーを表示する
 - `Enter`なしで検索、選択、詳細確認を継続できる
 - 左幅が利用可能幅の1/3かつ24〜50 columnsとなり、右へ残りが割り当てられる
 - 全角文字、結合文字、ANSI stylingを含む見出し語をdisplay widthで安全に省略する
 - 79 columns以下では警告し、80 columns以上へ戻ると状態を保ったまま2ペインを復元する
 - resize時にDB queryを再実行しない
+- PageUp / PageDownで右本文を1行重複させてページscrollする
+- 選択変更、新しい検索結果、empty queryで詳細scroll位置を先頭へ戻す
+- resize後の再折り返しでscroll位置を有効範囲へclampする
+- scroll操作でquery、検索focus、DB queryが変化しない
+- 新結果に同じ選択IDがあれば維持し、なければ先頭を選択する
+- 重複見出し語を `id` で区別して選択を維持する
+- 選択行が左ペインの表示範囲へ入るよう一覧scroll位置を調整する
+- 非空queryの検索待ち中は前回結果、選択、scroll位置を通常表示で維持する
+- 検索待ち中も選択移動と詳細scrollを受け付ける
+- 辞書切替時は別辞書の結果と選択・scroll位置を即座にclearする
+- Tabによる辞書切替でqueryと検索errorもclearし、DB検索を開始しない
+- 辞書切替後も検索入力のfocusを維持し、statusの辞書表示を更新する
+- 既定DBのみ、他方のみ、両方、どちらも利用不可の起動パターンを検証する
+- 既定DBが利用不可なら正常な他方へfallbackして警告する
+- 利用可能DBが1つならTab案内を隠し、Tabで検索状態を変更しない
+- 両DBが利用不可なら両方の理由を示してTUI起動前に失敗する
+- session中に追加されたDBは再起動まで利用可能集合へ加えない
+- 通常のstatusには現在の辞書名だけを表示する
+- 短い警告中だけstatusを警告文へ置き換え、次の通常操作で辞書名へ戻す
+- 内部検索方式、件数、選択位置、latencyをstatusへ表示しない
 
 ---
 
@@ -1525,8 +1585,6 @@ Telemetry も原則導入しない。
 
 - key binding
 - 色・テーマ
-- status line
-- 英和 / 和英切替 UI
 - mouse support の有無
 
 ### CLI
@@ -1584,13 +1642,11 @@ results |
 > query
 ```
 
-検索、選択、詳細previewをこのphaseで実装する。
+検索、選択、詳細preview、PageUp / PageDownによる詳細scroll、Tabによる辞書切替をこのphaseで実装する。
 
 ### Phase 4: TUI refinement
 
 - selection
-- detail scrolling
-- dictionary switch
 - resize
 - keyboard UX
 
