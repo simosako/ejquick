@@ -328,7 +328,7 @@ ON entries(headword_norm);
 
 3文字以上の部分一致検索用に FTS5 を利用する。
 
-候補:
+`entries` を正とする external content table 方式を採用する。
 
 ```sql
 CREATE VIRTUAL TABLE entries_fts
@@ -343,6 +343,14 @@ USING fts5(
 FTS5 trigram tokenizer の採用を第一候補とする。
 
 初期リリースでは部分一致検索の対象を見出し語に限定し、検索用に正規化した `headword_norm` のみを FTS index へ登録する。`body` の全文検索は初期リリースの対象外とし、将来追加する場合は見出し語検索と分離した検索モードおよび index として設計する。
+
+external content table の作成だけでは、既存の `entries` は FTS index へ登録されない。Builder は `entries` の投入後に以下を実行し、FTS index を明示的に構築する。
+
+```sql
+INSERT INTO entries_fts(entries_fts) VALUES('rebuild');
+```
+
+完成後のDBは検索アプリから read-only で使用し、`entries` を更新しないため、初期リリースでは FTS 同期用の INSERT / UPDATE / DELETE trigger を作成しない。Builder は完成前に FTS5 integrity-check を実行し、`entries` と FTS index の整合性を確認する。
 
 理由:
 
@@ -961,7 +969,11 @@ entries insert
  ↓
 B-tree index
  ↓
-FTS5 build
+FTS5 external content table 作成
+ ↓
+FTS5 rebuild
+ ↓
+FTS5 integrity-check
  ↓
 ANALYZE
  ↓
@@ -986,9 +998,11 @@ ANALYZE
 1. entries table を作成
 2. transaction 内で一括投入
 3. B-tree INDEX 作成
-4. FTS table 構築
-5. ANALYZE
-6. 必要に応じて VACUUM
+4. FTS external content table 作成
+5. FTS index rebuild
+6. FTS5 integrity-check
+7. ANALYZE
+8. 必要に応じて VACUUM
 
 プログラム作成後に実際にデータを投入し、速度を測定。遅いようなら最適化を検討する。
 
@@ -1376,7 +1390,6 @@ Telemetry も原則導入しない。
 ### SQLite
 
 - FTS5 tokenizer 設定
-- external content table の構成
 - raw 列を保持するか
 - page size / journal mode 等の PRAGMA
 
