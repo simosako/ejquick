@@ -390,7 +390,7 @@ FTS5 trigram は原理上3文字未満の検索には適さない。
 ```text
 query length = 0
     ↓
-検索しない / 初期表示
+DB検索を行わず、静的な操作案内を表示
 
 query length = 1-2
     ↓
@@ -649,81 +649,67 @@ fzf のように、起動すると画面最下部に入力欄があり、その�
 概念例:
 
 ```text
-English
-English breakfast
-English Channel
-English horn
-English language
-English muffin
-English-speaking
-Englishman
+English             | English
+English breakfast   |
+English Channel     | Meaning and description of
+English horn        | the selected entry...
+English language    |
+English muffin      |
+English-speaking    |
+Englishman          |
 
-────────────────────────────────────
+----------------------------------------------
 > eng
 ```
 
 ユーザーが文字を入力するごとに検索結果を即座に更新する。
 
+起動時およびqueryが空の場合はDB検索を行わない。左の検索結果一覧を空にし、右の詳細ペインに静的な操作案内を表示する。
+
+```text
+Type to search
+Tab: switch dictionary
+Ctrl-C: quit
+```
+
+操作案内は検索結果ではなく、選択や詳細表示の対象にしない。実際のkey bindingと食い違わないよう、表示文字列はkey bindingの定義と同じ情報から生成する。
+
+入力をすべて削除してqueryが空になった場合はrequest IDを更新し、実行中検索をcancelし、検索結果、選択位置、loading状態、検索errorをclearする。`Selected` は選択なしを表す値へ戻す。その後に到着した旧requestのmessageはrequest IDにより破棄する。
+
 ### 10.2 TUI 画面構成
 
-最終レイアウトは未決定。
-
-今後比較検討する。
-
-候補:
-
-#### A. fzf 型
+検索結果領域を左右2ペインへ分割する。
 
 ```text
-検索結果
-検索結果
-検索結果
-検索結果
-
--------------------------------
+検索結果一覧          | 選択中の見出し語
+                      |
+> selected entry      | 意味・説明
+  another entry       | ...
+  another entry       |
+                      |
+------------------------------------------------
+status
 > query
 ```
 
-最もシンプルで高速。
+左ペインには検索結果の見出し語一覧を表示し、選択行を強調する。右ペインには選択中エントリの見出し語と本文を表示する。利用者がUp / DownまたはCtrl-P / Ctrl-Nで選択を移動すると、右ペインを即座に更新する。
 
-#### B. 候補 + preview 型
+検索結果には本文も含まれているため、選択移動時にDB queryや `tea.Cmd` は発行しない。`Enter`による詳細画面への遷移は設けず、検索入力へfocusを維持したまま一覧を移動できるようにする。
 
-```text
-候補一覧
-候補一覧
-候補一覧
--------------------------------
-選択中エントリの意味
-複数行の説明
--------------------------------
-> query
-```
+queryが空の場合は左ペインを空にし、右ペインへ操作案内を表示する。queryが空でなく検索結果が0件の場合は、左ペインを空にし、右ペインへ該当結果がないことを表示する。
 
-Enter を押さなくても意味を確認できる。
-
-#### C. 検索 / 詳細画面切替型
-
-検索画面:
+ペイン領域の幅を `pane_width`、中央の区切りを1 columnとして、左右の幅を以下のように計算する。
 
 ```text
-候補一覧
-...
-> query
+left_width  = clamp(floor((pane_width - 1) / 3), 24, 50)
+right_width = pane_width - 1 - left_width
 ```
 
-Enter:
+左ペインは利用可能幅のおよそ1/3とし、最小24 columns、最大50 columnsに制限する。右ペインには中央区切りを除いた残りすべてを割り当て、長い本文の表示を優先する。statusとquery入力欄はペイン分割の下でterminal全幅を使用する。
 
-```text
-見出し語
+左ペインに収まらない見出し語は末尾をellipsisで省略し、完全な見出し語は右ペイン上部に表示する。幅の計算と切り詰めはbyte数やrune数ではなくterminal上のdisplay widthを基準とし、全角文字や結合文字を途中で分断しない。ANSI stylingによる制御sequenceは表示幅へ含めない。
 
-意味
-説明
-...
-```
-
-Esc で検索画面へ戻る。
-
-初期実装では A を最小構成とし、その後 B または C を評価する方針が有力。
+terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せず、terminalが狭いことと必要な最小幅を示す警告画面を表示する。query、検索結果、選択位置はmodel内に保持し、80 columns以上へ戻った際に同じ状態で2ペイン表示を復元する。resizeだけではDB queryを再実行しない。
 
 ### 10.3 キー操作案
 
@@ -735,8 +721,6 @@ Esc で検索画面へ戻る。
 | Backspace | query 削除 / 即検索 |
 | Up / Ctrl-P | 前候補 |
 | Down / Ctrl-N | 次候補 |
-| Enter | 選択 / 詳細表示 |
-| Esc | 戻る |
 | Ctrl-C | 終了 |
 | Tab | 英和 / 和英切替候補 |
 
@@ -957,9 +941,6 @@ database = "~/.local/share/ejquick/waei.sqlite3"
 [search]
 default_dictionary = "eiji"
 max_results = 50
-
-[tui]
-preview = false
 ```
 
 `search.max_results` を省略した場合は50を使用する。1〜500の範囲外は起動時の設定エラーとし、暗黙に丸めない。
@@ -969,7 +950,6 @@ preview = false
 - DB path
 - default dictionary
 - result limit
-- preview mode
 - key bindings
 - theme
 
@@ -1419,7 +1399,9 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - 1文字
 - 2文字
 - 3文字
-- empty query
+- 起動時とquery全削除時にDB検索を行わず、静的な操作案内を表示すること
+- empty queryで結果、選択、loading状態、検索errorがclearされること
+- 操作案内を検索結果として選択できないこと
 
 ### 21.4 Performance
 
@@ -1448,6 +1430,18 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - `--force` 成功時に検査済みDBへ原子的に置換される
 - 置換失敗時に既存DBが維持される
 - 残存した一時DBを完成DBとして使用しない
+
+### 21.6 TUI
+
+- 左ペインに検索結果、右ペインに選択中エントリの詳細を表示する
+- 選択移動でDB queryを発行せず、右ペインだけを更新する
+- queryが空の場合は右ペインへ操作案内を表示する
+- 検索結果が0件の場合は右ペインへ該当結果がないことを表示する
+- `Enter`なしで検索、選択、詳細確認を継続できる
+- 左幅が利用可能幅の1/3かつ24〜50 columnsとなり、右へ残りが割り当てられる
+- 全角文字、結合文字、ANSI stylingを含む見出し語をdisplay widthで安全に省略する
+- 79 columns以下では警告し、80 columns以上へ戻ると状態を保ったまま2ペインを復元する
+- resize時にDB queryを再実行しない
 
 ---
 
@@ -1529,9 +1523,6 @@ Telemetry も原則導入しない。
 
 ### TUI
 
-- 最終画面構成
-- preview pane の有無
-- detail view の有無
 - key binding
 - 色・テーマ
 - status line
@@ -1583,23 +1574,22 @@ TUI より先に検索 service と repository を固める。
 
 ### Phase 3: Minimal TUI
 
-fzf 型 UI:
+左右2ペイン型UI:
 
 ```text
-results
-results
-results
+results | selected entry detail
+results |
+results |
 
 > query
 ```
 
-を実装する。
+検索、選択、詳細previewをこのphaseで実装する。
 
 ### Phase 4: TUI refinement
 
 - selection
-- detail
-- preview
+- detail scrolling
 - dictionary switch
 - resize
 - keyboard UX
