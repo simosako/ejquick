@@ -165,7 +165,6 @@ ejquick
 - CLI 検索
 - SQLite DB の読み込み
 - インクリメンタル検索
-- 検索モード切り替え
 - 検索結果表示
 - 辞書エントリ詳細表示
 
@@ -403,9 +402,7 @@ FTS5 trigram 部分一致
 （B-tree index の前方一致候補を優先）
 ```
 
-ユーザーが「前方一致モード」を明示的に選択している場合は、3文字以上でも B-tree index を利用できるようにする。
-
-ユーザーが Substring モードを明示的に選択していても、正規化後の query が1〜2文字の場合は Prefix 検索へ一時的にフォールバックする。数百万件に対する全面 LIKE scan は行わない。
+1〜2文字の部分一致検索や、数百万件に対する全面 LIKE scanは行わない。
 
 ### 7.7 Unicode 文字数
 
@@ -431,13 +428,16 @@ utf8.RuneCountInString(query)
 
 ### 8.1 検索モード
 
-最低限、以下の2モードを想定する。
+初期リリースで利用者へ提供する検索モードはAutoのみとする。検索モードの設定項目や切替操作は設けない。
+
+Autoモードは正規化後のquery文字数に応じて、以下の内部検索方式を選択する。
 
 - Prefix
-  - 前方一致
+  - B-tree indexによる前方一致
 - Substring
-  - 部分一致
-  - 正規化後の query が1〜2文字の場合は Prefix へ一時的にフォールバック
+  - Prefix候補を優先し、FTS5による部分一致候補で残枠を補完
+
+PrefixとSubstringは内部検索方式の名称であり、利用者が直接選択するモードではない。
 
 将来的な候補:
 
@@ -450,7 +450,7 @@ utf8.RuneCountInString(query)
 
 ### 8.2 自動検索戦略
 
-デフォルトでは入力文字数に応じて検索手段を自動切り替えする。
+Autoモードでは入力文字数に応じて内部検索方式を自動的に切り替える。
 
 ```text
 1文字:
@@ -467,21 +467,29 @@ utf8.RuneCountInString(query)
 
 内部実装では、まず B-tree index で前方一致候補を検索し、検索結果の上限に空きがある場合のみ、FTS5 で前方一致以外の部分一致候補を補う。前方一致候補だけで上限に達した場合、その他の部分一致候補は取得しない。
 
-明示的な Substring モードで1〜2文字の query を Prefix 検索へフォールバックしている間は、TUI のステータス領域に実効モードを表示する。
-
-ただし、設定またはキー操作によって「常に prefix」を選択可能とする。
+TUIのstatus領域には、選択モードではなく現在のqueryに対する実効検索方式としてPrefixまたはSubstringを表示する。
 
 ### 8.3 検索件数
 
-インクリメンタル検索では全件を取得しない。
+インクリメンタル検索では全件を取得せず、`max_results` を検索結果の上限とする。既定値は50、許容範囲は1〜500とする。
 
-例:
-
-```sql
-LIMIT 50
+```text
+default: 50
+minimum: 1
+maximum: 500
 ```
 
-画面サイズや設定値に応じて 50〜100 件程度を上限とする。
+Prefix検索の `:limit` には `max_results` を使用する。Substring検索ではPrefix検索後の残枠だけを最終結果へ追加し、候補poolを含めても既定の内部上限を超えて保持しない。
+
+設定読み込み時に範囲を検証し、範囲外は設定エラーとする。Search Service側でも呼び出し元にかかわらず500件をhard limitとして検証し、過大なqueryを防ぐ。
+
+SQLでは検証済みの値をparameterとしてbindする。
+
+```sql
+LIMIT :limit
+```
+
+TUIはterminalに表示可能な行だけを描画するが、terminalの高さやresizeによって検索結果集合と `max_results` は変更しない。初期リリースではpaginationや追加読み込みを実装しない。
 
 ユーザーが見られない数千〜数百万件をアプリへロードしない。
 
@@ -511,12 +519,13 @@ Auto モードでは、最初に Prefix 検索を行い、残りの表示枠を 
 概念:
 
 ```sql
-SELECT e.id, e.headword, e.body
+SELECT e.id, e.headword, e.headword_norm, e.body
 FROM entries_fts f
 JOIN entries e ON e.id = f.rowid
 WHERE entries_fts MATCH :fts_query
   AND instr(e.headword_norm, :query) > 1
-LIMIT :limit;
+ORDER BY rank, e.id
+LIMIT :candidate_limit;
 ```
 
 `:query` は辞書種別に応じて正規化済みの検索文字列とする。`:fts_query` は、`:query` 内の `"` を `""` へ置換した後、全体を `"` で囲んだFTS5 quoted phraseとする。
@@ -529,15 +538,22 @@ SQL文字列へ値を連結せず、`:query` と `:fts_query` はどちらもSQL
 
 `instr(e.headword_norm, :query) > 1` により、正規化済み見出し語にliteralなqueryが実在することを確認すると同時に、先にPrefix検索で取得した完全一致・前方一致候補を除外する。
 
-### 8.6 並び順
+FTS5の `rank` は最終的な表示順ではなく、アプリケーション側で再rankingする候補poolを絞るためだけに使用する。Prefix検索後の残枠を `remaining` とし、候補poolの初期上限を以下とする。
 
-初期案:
+```text
+candidate_limit = min(max(remaining * 10, 100), 500)
+```
+
+`remaining` が0の場合はFTS5 queryを実行しない。候補poolの倍率と上限は、実データで検索latencyと検索品質を測定した結果に基づいて調整できる内部定数とし、初期リリースでは設定項目にしない。
+
+### 8.6 並び順
 
 Prefix 検索:
 
 1. 完全一致
 2. 短い headword
 3. 辞書順
+4. `id`
 
 Substring 検索:
 
@@ -545,13 +561,14 @@ Substring 検索:
 2. headword の先頭に一致
 3. その他の部分一致
 
-前方一致以外の候補内での並び順は以下を候補とする。
+完全一致と前方一致はPrefix検索結果から先に確定する。FTS5で抽出したその他の部分一致候補は、候補pool内で以下の順にアプリケーション側で安定sortし、残枠分だけ採用する。
 
-1. headword 内で早い位置に一致
-2. 短い headword
-3. 必要に応じて FTS rank
+1. `headword_norm` 内の一致開始位置が早い
+2. `headword_norm` の文字数が短い
+3. `headword_norm` の辞書順
+4. `id`
 
-単純な FTS rank が辞書検索に適するとは限らないため、ランキング方式は実測して決定する。
+一致開始位置と文字数はbyte数ではなくUnicode code point / rune単位で比較する。FTS5 rankを直接の表示順にしないことで、同じDBとqueryに対して決定的な結果順を維持する。ただし候補poolは全一致集合の一部なので、その他の部分一致全件に対する厳密な最適順は保証しない。インクリメンタル検索の応答時間を優先する。
 
 ---
 
@@ -722,7 +739,6 @@ Esc で検索画面へ戻る。
 | Esc | 戻る |
 | Ctrl-C | 終了 |
 | Tab | 英和 / 和英切替候補 |
-| Ctrl-F | Prefix / Substring 切替候補 |
 
 fzf や shell TUI との操作感を大きく外さないようにする。
 
@@ -737,7 +753,6 @@ type Model struct {
     Selected    int
     Width       int
     Height      int
-    SearchMode  SearchMode
     Dictionary  DictionaryType
 }
 ```
@@ -938,18 +953,18 @@ database = "~/.local/share/ejquick/waei.sqlite3"
 
 [search]
 default_dictionary = "eiji"
-default_mode = "auto"
 max_results = 50
 
 [tui]
 preview = false
 ```
 
+`search.max_results` を省略した場合は50を使用する。1〜500の範囲外は起動時の設定エラーとし、暗黙に丸めない。
+
 候補項目:
 
 - DB path
 - default dictionary
-- default search mode
 - result limit
 - preview mode
 - key bindings
@@ -1385,6 +1400,12 @@ SQLite の小規模 fixture DB をテスト時に生成する。
 - `AND`、`OR`、`NOT`、引用符、括弧を含むliteral query
 - FTS5 query syntax errorとSQL injectionが発生しないこと
 - Substring候補から完全一致・前方一致候補が除外されること
+- FTS候補poolが内部上限を超えないこと
+- Substring候補が一致位置、文字数、辞書順、`id`の順に安定して並ぶこと
+- 日本語の一致位置と文字数をrune単位で比較すること
+- `max_results` の既定値、および1・500の境界値
+- 0、負数、501以上のresult limitを拒否すること
+- terminal resizeで検索結果集合が変化しないこと
 - 1文字
 - 2文字
 - 3文字
@@ -1496,12 +1517,6 @@ Telemetry も原則導入しない。
 - OSS license
 - repository 名
 
-### 検索
-
-- substring のランキング
-- prefix と substring の UI 上の切替方法
-- 検索結果 limit
-
 ### TUI
 
 - 最終画面構成
@@ -1575,7 +1590,6 @@ results
 - selection
 - detail
 - preview
-- mode switch
 - dictionary switch
 - resize
 - keyboard UX
