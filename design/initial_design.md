@@ -184,7 +184,7 @@ ejquick-build
 - B-tree INDEX 作成
 - FTS5 virtual table 作成
 - FTS index の生成
-- 必要に応じて ANALYZE / VACUUM 等を実行
+- ANALYZE / PRAGMA optimize と、指定時のみ VACUUM を実行
 - DB メタデータ保存
 - 変換時の統計情報表示
 - エラー行の検出・報告
@@ -993,9 +993,27 @@ fieldは `id`、`dictionary`、`headword`、`body` に固定し、`headword_norm
 ejquick english | less
 ```
 
+初期リリースではstdinをCLI queryの入力源として使用しない。positional queryがあるCLI検索では、stdinがterminalでもpipeでも読み取らず、入力待ちを発生させない。`--stdin` optionと複数行のbatch検索も提供しない。
+
+positional queryがない場合はstdinの内容やTTY状態からCLI検索へ暗黙に切り替えず、TUI起動を選択する。TUIに必要なinteractive terminal input/outputを利用できない場合は、pipe内容をqueryとして解釈せず、TUIを開始する前に明確なエラーをstderrへ出力する。
+
 将来的には clipboard や shell command との連携も可能。
 
 TUI と CLI の検索ロジックは共通 package を利用する。
+
+### 12.5 Exit status
+
+`ejquick` のCLI検索はgrep系検索commandと同じ3値を使用する。
+
+```text
+0  検索に成功し、1件以上の結果を出力した
+1  検索に成功したが、結果が0件だった
+2  usage、config、DB、検索、stdout書込のerror
+```
+
+結果が0件の場合はstdoutを空のままexit code 1で終了する。error内容はstderrへ出力し、stdoutへ混在させない。出力途中のwrite errorは、すでに一部を出力していた場合もexit code 2とする。
+
+`--help` と `--version` はconfigやDBを読み込まず、表示に成功すればexit code 0とする。TUIのCtrl-Cによる通常終了は0、TUI開始前のusage、config、DB、terminal errorは2とする。OS signalによる強制終了codeはshellとplatformの慣例に従う。
 
 ---
 
@@ -1114,9 +1132,11 @@ FTS5 rebuild
  ↓
 FTS5 integrity-check
  ↓
+`--compact` 指定時のみ VACUUM
+ ↓
 ANALYZE
  ↓
-必要に応じて compaction
+PRAGMA optimize
  ↓
 一時DBをcloseしてread-onlyで最終検査
  ↓
@@ -1163,28 +1183,29 @@ PRAGMA cache_size = -131072;
 4. FTS external content table 作成
 5. FTS index rebuild
 6. FTS5 integrity-check
-7. ANALYZE
-8. 必要に応じて VACUUM
+7. `--compact` 指定時のみ VACUUM
+8. ANALYZE
+9. PRAGMA optimize
 
 プログラム作成後に実際にデータを投入し、速度を測定。遅いようなら最適化を検討する。
 
 ### 14.5 Compaction
 
-DB 作成後に必要に応じて以下を検討する。
+通常buildでは `VACUUM` を実行しない。新しい空DBへのbulk buildでは断片化が比較的小さく、`VACUUM` はbuild時間とpeak disk使用量を大きくするため、明示的な `--compact` 指定時だけ実行する。
 
-```sql
-ANALYZE;
-VACUUM;
-PRAGMA optimize;
-```
-
-VACUUM は時間と一時ディスクを多く使用するため、常に実行するか optional にするかは検討する。
-
-例:
+配布用などDB sizeを優先するbuildでは以下のように指定する。
 
 ```bash
-ejquick-build --compact
+ejquick-build \
+  --type eiji \
+  --input EIJIRO144-10.TXT \
+  --output eiji.sqlite3 \
+  --compact
 ```
+
+`VACUUM` はentries投入transactionとindex構築を完了した後、一時DBに対してtransaction外で実行する。失敗した場合はbuild全体を失敗とし、一時DBを破棄して既存の完成DBには影響させない。
+
+`--compact` の有無にかかわらず、optional `VACUUM` の後に `ANALYZE` と `PRAGMA optimize` を実行し、その後に一時DBをcloseしてread-onlyの最終検査を行う。
 
 ### 14.6 Builder metadata
 
@@ -1214,7 +1235,10 @@ skipped_entry_count
 encoding
 normalization_version
 fts_version
+compacted
 ```
+
+`compacted` は `--compact` による `VACUUM` を完了した場合に `true`、通常buildでは `false` を保存する。
 
 検索アプリは `schema_version` を見て互換性を確認する。
 
@@ -1222,7 +1246,7 @@ fts_version
 
 Builder は `--output` へ直接書き込まず、出力先と同じdirectoryに衝突しない名前の一時DBを作成する。同じfilesystem内でのrenameを利用できるよう、systemの一時directoryは使用しない。
 
-FTS5 integrity-checkを含むすべての構築処理を完了した後、DBをcloseし、一時DBをread-onlyで開き直してschema、metadata、件数、検索smoke testを検査する。検査に成功した一時DBだけを完成DBとして公開する。
+optional `VACUUM`、`ANALYZE`、`PRAGMA optimize`を含むすべての構築処理を完了した後、DBをcloseし、一時DBをread-onlyで開き直してschema、metadata、`compacted`、件数、検索smoke testを検査する。検査に成功した一時DBだけを完成DBとして公開する。
 
 公開前に一時DB fileを明示的に同期する。renameまたはreplace後は、OSが対応する場合に出力先directoryも同期し、電源断後に完成DBのdirectory entryが失われる可能性を抑える。
 
@@ -1535,6 +1559,8 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - 最大RSS
 - 一時disk使用量
 
+`--compact` の有無でDB size、build時間、最大RSS、peak disk使用量を比較し、配布用buildでの利用判断に使う。
+
 ### 21.5 Builder publication
 
 以下を各対応OSで検証する。
@@ -1544,6 +1570,10 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - `--force` 成功時に検査済みDBへ原子的に置換される
 - 置換失敗時に既存DBが維持される
 - 残存した一時DBを完成DBとして使用しない
+- 通常buildではVACUUMを実行せず、metadataの `compacted` が `false` になる
+- `--compact` ではVACUUMを実行し、完了DBの `compacted` が `true` になる
+- `--compact` 中の失敗で一時DBを破棄し、既存DBを維持する
+- 両方のbuildでANALYZE、PRAGMA optimize、read-only最終検査を実行する
 
 ### 21.6 TUI
 
@@ -1604,6 +1634,14 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - jsonlが固定fieldを正しくescapeし、1エントリ1行で出力する
 - 両formatが結果順と重複を維持し、0件ではstdoutへ何も出力しない
 - TUI起動で明示された `--format` をusage errorにする
+- positional queryがある場合はstdinを読み取らない
+- pipeされたstdinだけではCLI検索へ切り替わらない
+- interactive terminalがないTUI起動を、stdinをqueryとして解釈せず拒否する
+- `--stdin` と複数行batch検索を提供しない
+- CLI検索が一致ありで0、一致なしで1、errorで2を返す
+- 0件時はstdoutが空で、error時は診断がstderrだけに出る
+- `--help` と `--version` がconfigとDBなしで0を返す
+- TUIのCtrl-Cは0、TUI開始前errorは2を返す
 
 ---
 
@@ -1683,13 +1721,8 @@ Telemetry も原則導入しない。
 - OSS license
 - repository 名
 
-### CLI
-
-- pipe 入力対応
-
 ### Builder
 
-- VACUUM を default にするか
 - progress UI
 - incremental rebuild の有無
 
