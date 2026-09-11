@@ -1,8 +1,8 @@
-# 英辞郎・和英辞郎 TUI/CLI 辞書ツール 設計書
+# EJQuick 設計書
 
 > Status: Draft  
 > 対象: 英辞郎 / 和英辞郎 TXT データを利用したローカル辞書検索ツール  
-> プログラム名: `ejquick`
+> 正式プログラム名: EJQuick
 
 ---
 
@@ -151,7 +151,11 @@ Bubble Tea の既存コンポーネントを無理に利用するのではなく
 
 ## 5. バイナリ構成
 
-プログラム名はメインプログラム（辞書検索）が ejquick 、そのためのデータを作るプログラム（DB変換）が ejquick-build
+正式な製品表記は `EJQuick` とする。README、help、release titleなど利用者向けの文章ではこの表記を使用する。
+
+command、binary filename、config・data directoryなどの技術識別子には小文字の `ejquick` を使用する。検索アプリは `ejquick`、DB変換ツールは `ejquick-build` とし、大文字小文字や空白を含む別名は設けない。
+
+GitHub repository名は `ejquick`、URLは `https://github.com/simosako/ejquick` とする。Go module pathも `github.com/simosako/ejquick` に統一する。
 
 ### 5.1 検索アプリ
 
@@ -1025,13 +1029,7 @@ TOML
 
 ### 13.2 配置場所
 
-基本:
-
-```text
-~/.config/<program-name>/config.toml
-```
-
-仮称:
+Linuxでの基本path:
 
 ```text
 ~/.config/ejquick/config.toml
@@ -1283,6 +1281,14 @@ Elapsed: 2m34s
 ```
 
 完了summaryには物理行数、登録件数、skip件数、完成DB size、経過時間、compact有無を含める。`--compact` を指定した場合だけVACUUM phaseの開始・完了も表示する。初期リリースではprogressの頻度・形式を変更するoptionや `--quiet` optionを設けない。
+
+### 14.9 Rebuild policy
+
+初期リリースではincremental rebuildに対応せず、入力TXT全体から毎回新しい一時DBを構築する。既存の完成DBをbuildの入力、更新先、またはcacheとして使用せず、entries、B-tree index、FTS table、FTS index、metadataをすべて一から生成する。
+
+`--force` は検査済み一時DBの公開時に既存DBを置換できるようにするoptionであり、build処理を差分更新へ変更しない。入力が前回と同一でもbuildを省略せず、source hashによるskip、append-only更新、行単位の差分適用は行わない。`--incremental` などのoptionや差分管理用metadataも設けない。
+
+正常行の `entries.id` には入力TXTの物理行番号を使うため、途中行の追加・削除があれば後続entryも新しい物理行番号で再生成する。schema、正規化、FTS設定のversion変更時も同じfull rebuild経路を使用する。
 
 ---
 
@@ -1598,6 +1604,11 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - 途中件数を取得できないphaseでは割合やETAを表示しない
 - 完了summaryに物理行数、登録件数、skip件数、DB size、経過時間、compact有無を含める
 - `--compact` を指定した場合だけVACUUM phaseを表示する
+- 通常buildと `--force` の両方が既存DBを再利用せず、新しい一時DBへ全件構築する
+- 入力途中の行追加・削除後に再構築すると、各 `entries.id` が新しい物理行番号と一致する
+- 新しい入力から削除されたentryが置換後のDBに残らない
+- 入力が前回と同一でもbuildを省略しない
+- `--incremental`、append-only更新、差分管理用metadataを提供しない
 
 ### 21.6 TUI
 
@@ -1673,20 +1684,22 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 
 アプリケーションは GitHub 上で OSS として公開予定。
 
-プロジェクト自身の OSS license は未決定。
+EJQuick自身のsource codeとprojectで作成したdocumentationにはMIT Licenseを採用し、repository rootの `LICENSE` に全文を配置する。
 
-候補例:
+```text
+MIT License
+Copyright (c) 2026 EJQuick contributors
+```
 
-- MIT
-- BSD-2-Clause / BSD-3-Clause
-- Apache-2.0
+第三者libraryはEJQuickのMIT Licenseへ変更せず、それぞれのlicenseに従う。依存versionを `go.mod` で固定した後、推移依存を含むlicense auditを実施して `THIRD_PARTY_NOTICES` を生成する。release前にも固定済み依存graphを再検査する。
 
-ライセンスは採用依存ライブラリとの整合性を確認して決定する。
+`modernc.org/sqlite` のBSD-3-Clause copyright、license本文、免責条項をsource・binaryそれぞれの再配布条件に従って保持する。upstream SQLiteとFTS5はpublic domainとして扱う。将来 `modernc.org/sqlite/vec` を使用する場合は、同packageのMIT noticeも追加する。
 
 重要:
 
+- MIT Licenseの対象はEJQuickのproject成果物であり、利用者が用意する辞書データには適用されない
 - 英辞郎 / 和英辞郎 TXT を repository に含めない
-- 変換後 SQLite DB を repository に含めない
+- 辞書TXTから生成した SQLite DB をrepositoryやreleaseへ含めない
 - テスト fixture に辞書本文をコピーしない
 - README ではユーザー自身が正規にデータを入手することを前提とする
 - プロジェクトの OSS ライセンスと辞書データの利用条件を混同しない
@@ -1721,6 +1734,8 @@ macOS Apple Silicon を正式対象とする。
 
 初期フェーズでは GitHub Releases を優先する。
 
+各release archiveにはbinaryだけでなく、EJQuickの `LICENSE` と固定済み依存graphから生成した `THIRD_PARTY_NOTICES` を同梱する。
+
 ---
 
 ## 24. セキュリティ / プライバシー
@@ -1735,23 +1750,7 @@ Telemetry も原則導入しない。
 
 ---
 
-## 25. 未決定事項
-
-以下は今後決定する。
-
-### プロジェクト
-
-- 正式プログラム名
-- OSS license
-- repository 名
-
-### Builder
-
-- incremental rebuild の有無
-
----
-
-## 26. 初期実装フェーズ案
+## 25. 初期実装フェーズ案
 
 ### Phase 1: DB Builder prototype
 
@@ -1813,9 +1812,9 @@ results |
 
 ---
 
-## 27. 設計上の重要原則
+## 26. 設計上の重要原則
 
-### 27.1 Fast path を単純にする
+### 26.1 Fast path を単純にする
 
 もっとも頻繁な処理:
 
@@ -1833,7 +1832,7 @@ render
 
 この path に不要な abstraction、network、serialization を入れない。
 
-### 27.2 DB は事前生成
+### 26.2 DB は事前生成
 
 検索時に以下をしない。
 
@@ -1844,7 +1843,7 @@ render
 
 すべて Builder で事前に完了させる。
 
-### 27.3 UI と検索エンジンを分離
+### 26.3 UI と検索エンジンを分離
 
 Bubble Tea に SQLite query を直接埋め込まない。
 
@@ -1860,7 +1859,7 @@ SQLite
 
 とする。
 
-### 27.4 辞書データと OSS を分離
+### 26.4 辞書データと OSS を分離
 
 repository はプログラムだけを公開する。
 
@@ -1879,7 +1878,7 @@ Local only
   waei.sqlite3
 ```
 
-### 27.5 数百万件を前提にする
+### 26.5 数百万件を前提にする
 
 「データ量が少ない場合だけ高速」な構造を避ける。
 
@@ -1893,7 +1892,7 @@ Local only
 
 ---
 
-## 28. 現時点の推奨技術構成
+## 27. 現時点の推奨技術構成
 
 ```text
 Language
@@ -1951,7 +1950,7 @@ GUI
 
 ---
 
-## 29. 今後の検証項目
+## 28. 今後の検証項目
 
 設計上、最初に実測すべきなのは SQLite / FTS5 部分である。
 
@@ -1976,7 +1975,7 @@ GUI
 
 ---
 
-## 30. まとめ
+## 29. まとめ
 
 本プロジェクトは、英辞郎 / 和英辞郎 TXT を事前に SQLite 化し、B-tree index と FTS5 を使って高速検索するローカル辞書ツールとする。
 
