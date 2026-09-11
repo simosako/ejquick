@@ -20,8 +20,16 @@ Download a binary for your platform from
 from source:
 
 ```bash
-go build ./cmd/ejquick
-go build ./cmd/ejquick-build
+make build                    # current platform, into tmp/
+make build VERSION=v0.1.0     # stamp a version
+make release VERSION=v0.1.0   # cross-build dist/ archives for all targets
+```
+
+Or with plain `go build`:
+
+```bash
+go build -ldflags "-X main.version=$(git describe --tags --always)" ./cmd/ejquick
+go build -ldflags "-X main.version=$(git describe --tags --always)" ./cmd/ejquick-build
 ```
 
 ## Quick start
@@ -94,6 +102,21 @@ max_results = 50
 
 Databases omitted from the config default to the platform data directory
 under `ejquick/`. `max_results` must be 1..500.
+
+## Logging
+
+Errors are appended to a log file (best effort; a broken log never stops
+the app):
+
+```text
+Linux:   ~/.local/state/ejquick/ejquick.log
+macOS:   ~/Library/Application Support/ejquick/ejquick.log
+Windows: %AppData%\ejquick\ejquick.log
+```
+
+Run with `--debug` to also log every search (dictionary, request ID,
+query, result count, elapsed time). The builder writes its fixed-line
+progress to stderr only and does not use the log file.
 
 ## License
 

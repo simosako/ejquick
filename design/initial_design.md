@@ -1512,6 +1512,36 @@ TUI のデバッグログは明示的なオプションで有効化する。
 
 Builderのprogress、警告、error、完了summaryは14.8の固定行形式でstderrへ出力する。
 
+### 20.1 Log file path
+
+log fileはOSの慣習に従う次の1 fileに追記する。log rotationは初期リリースでは行わず、利用者が削除すれば作り直す。
+
+```text
+Linux
+  $XDG_STATE_HOME/ejquick/ejquick.log
+  XDG_STATE_HOME未設定時: $HOME/.local/state/ejquick/ejquick.log
+
+macOS
+  $HOME/Library/Application Support/ejquick/ejquick.log
+
+Windows
+  %AppData%\ejquick\ejquick.log
+```
+
+directoryは起動時に作成する。log fileのopenや書き込みに失敗してもアプリケーションを起動/継続し、stderrへ1行の警告だけを出す。ログはbest effortとし、起動失敗扱いにしない。
+
+1行の形式は次のとおり。検索errorの詳細には辞書種別とrequest IDを付ける。
+
+```text
+2006-01-02T15:04:05Z07:00 LEVEL message
+```
+
+`LEVEL` は `ERROR` または `DEBUG`。Builderはlog fileへ書かず、stderr固定行のみとする。
+
+### 20.2 Debug log
+
+`ejquick --debug` を指定した場合のみ、検索のrequest ID、正規化済みquery、結果件数、latencyをDEBUG levelでlog fileへ記録する。`--debug` なしでは検索の正常系をログしない。`--debug` はTUI・CLI検索の両方で有効で、usageでは他のoptionと同じ扱いとする。
+
 ---
 
 ## 21. テスト

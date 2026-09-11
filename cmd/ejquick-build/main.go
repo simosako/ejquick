@@ -32,10 +32,13 @@ Exit codes: 0 success, 1 usage error, 2 build failure.
 `
 
 func main() {
-	opts, err := parseArgs(os.Args[1:])
+	opts, done, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ejquick-build: %v\n\n%s", err, usage)
 		os.Exit(1)
+	}
+	if done {
+		return
 	}
 	if opts == nil {
 		fmt.Fprint(os.Stdout, usage)
@@ -51,7 +54,11 @@ func main() {
 	_ = stats
 }
 
-func parseArgs(args []string) (*builder.Options, error) {
+// parseArgs returns the options, or done=true when help or version
+// output has already been printed (the caller should exit 0). A nil
+// *builder.Options with done=false and nil error is a request to print
+// usage.
+func parseArgs(args []string) (*builder.Options, bool, error) {
 	fs := flag.NewFlagSet("ejquick-build", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
@@ -68,28 +75,29 @@ func parseArgs(args []string) (*builder.Options, error) {
 		verLong  = fs.Bool("version", false, "show version")
 	)
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if *help || *helpLong {
-		return nil, nil
+		fmt.Fprint(os.Stdout, usage)
+		return nil, true, nil
 	}
 	if *ver || *verLong {
 		fmt.Fprintf(os.Stdout, "ejquick-build %s\n", version)
-		return nil, nil
+		return nil, true, nil
 	}
 
 	dt, err := dictionary.ParseType(*typeStr)
 	if err != nil {
-		return nil, fmt.Errorf("--type: %w", err)
+		return nil, false, fmt.Errorf("--type: %w", err)
 	}
 	if *input == "" {
-		return nil, fmt.Errorf("--input is required")
+		return nil, false, fmt.Errorf("--input is required")
 	}
 	if *output == "" {
-		return nil, fmt.Errorf("--output is required")
+		return nil, false, fmt.Errorf("--output is required")
 	}
 	if fs.NArg() > 0 {
-		return nil, fmt.Errorf("unexpected arguments: %v", fs.Args())
+		return nil, false, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
 
 	return &builder.Options{
@@ -99,5 +107,5 @@ func parseArgs(args []string) (*builder.Options, error) {
 		Force:    *force,
 		Compact:  *compact,
 		Progress: os.Stderr,
-	}, nil
+	}, false, nil
 }

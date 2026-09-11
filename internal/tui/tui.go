@@ -2,19 +2,19 @@ package tui
 
 import (
 	"fmt"
-	"io"
-	"os"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/logging"
 	"github.com/simosako/ejquick/internal/search"
 )
 
 // Run starts the TUI. It opens each configured database, verifies it,
 // and fails before drawing only when neither dictionary is usable.
-func Run(cfg *config.Config, logFile io.Writer) error {
+// Search error details are written to the log file once per request.
+func Run(cfg *config.Config, logger *logging.Logger) error {
 	services := make(map[dictionary.Type]*search.Service)
 	unavailable := make(map[dictionary.Type]string)
 
@@ -27,21 +27,25 @@ func Run(cfg *config.Config, logFile io.Writer) error {
 		repo, err := search.OpenRepository(path, dt)
 		if err != nil {
 			unavailable[dt] = err.Error()
+			logger.Error("startup: open %s (%s): %v", dt, path, err)
 			continue
 		}
 		svc, err := search.NewService(repo, cfg.Search.MaxResults)
 		if err != nil {
 			repo.Close()
 			unavailable[dt] = err.Error()
+			logger.Error("startup: service %s: %v", dt, err)
 			continue
 		}
 		services[dt] = svc
 	}
 
 	if len(services) == 0 {
-		return fmt.Errorf("no usable dictionary database\n%s\n%s",
+		err := fmt.Errorf("no usable dictionary database\n%s\n%s",
 			describeUnavailable(unavailable),
 			"Create one with: ejquick-build --type <eiji|waei> --input <TXT> --output <sqlite3>")
+		logger.Error("startup: %v", err)
+		return err
 	}
 
 	initial := cfg.DefaultDict()
@@ -54,13 +58,7 @@ func Run(cfg *config.Config, logFile io.Writer) error {
 		}
 	}
 
-	logErr := func(err error) {
-		if logFile != nil {
-			fmt.Fprintf(logFile, "search error: %v\n", err)
-		}
-	}
-
-	m := New(initial, services, unavailable, logErr)
+	m := New(initial, services, unavailable, logger)
 	p := tea.NewProgram(m)
 	_, err := p.Run()
 	for _, svc := range services {
@@ -69,7 +67,6 @@ func Run(cfg *config.Config, logFile io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
-	_ = os.Stdout
 	return nil
 }
 

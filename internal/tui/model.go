@@ -5,10 +5,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/logging"
 	"github.com/simosako/ejquick/internal/search"
 )
 
@@ -57,12 +59,15 @@ type Model struct {
 	StatusWarning string
 
 	services map[dictionary.Type]*search.Service
-	logErr   func(err error)
+	logger   *logging.Logger
 }
 
 // New builds the model for the given available services. The first
 // argument selects the initially active dictionary.
-func New(initial dictionary.Type, services map[dictionary.Type]*search.Service, unavailable map[dictionary.Type]string, logErr func(err error)) *Model {
+func New(initial dictionary.Type, services map[dictionary.Type]*search.Service, unavailable map[dictionary.Type]string, logger *logging.Logger) *Model {
+	if logger == nil {
+		logger = logging.Nop()
+	}
 	available := make(map[dictionary.Type]bool, len(services))
 	for dt := range services {
 		available[dt] = true
@@ -75,7 +80,7 @@ func New(initial dictionary.Type, services map[dictionary.Type]*search.Service, 
 		Available:          available,
 		UnavailableReasons: unavailable,
 		services:           services,
-		logErr:             logErr,
+		logger:             logger,
 	}
 }
 
@@ -98,11 +103,22 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // searchCmd starts one asynchronous search. The returned command carries
-// the request ID so stale results can be identified.
+// the request ID so stale results can be identified, and logs the
+// outcome at debug level with the elapsed time.
 func (m *Model) searchCmd(ctx context.Context, requestID uint64, query string) tea.Cmd {
 	svc := m.services[m.Dictionary]
+	dict := m.Dictionary
+	logger := m.logger
 	return func() tea.Msg {
+		start := time.Now()
 		entries, err := svc.Search(ctx, query)
+		if err != nil {
+			logger.Debug("search dict=%s request=%d query=%q interrupted elapsed=%s",
+				dict, requestID, query, time.Since(start).Round(time.Microsecond))
+		} else {
+			logger.Debug("search dict=%s request=%d query=%q results=%d elapsed=%s",
+				dict, requestID, query, len(entries), time.Since(start).Round(time.Microsecond))
+		}
 		return searchResultMsg{
 			requestID: requestID,
 			entries:   entries,

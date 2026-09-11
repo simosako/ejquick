@@ -10,9 +10,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/logging"
 	"github.com/simosako/ejquick/internal/search"
 	"github.com/simosako/ejquick/internal/tui"
 )
@@ -30,6 +32,7 @@ Options:
   -c, --config <path>             config file path
       --limit <1..500>            result limit for this process
       --format <plain|jsonl>      output format (CLI search only)
+      --debug                     enable debug logging to the log file
   -h, --help                      show this help
   -v, --version                   show version
 
@@ -37,18 +40,26 @@ Exit codes: 0 results found, 1 no results, 2 error.
 `
 
 func main() {
-	opts, query, err := parseArgs(os.Args[1:])
+	opts, query, done, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ejquick: %v\n\n%s", err, usage)
 		os.Exit(2)
+	}
+	if done {
+		return
 	}
 	if opts == nil {
 		fmt.Fprint(os.Stdout, usage)
 		return
 	}
 
+	// Best-effort log file: failures only warn on stderr.
+	logger := logging.Open(opts.debug)
+	defer logger.Close()
+
 	cfg, err := loadConfig(opts.configPath)
 	if err != nil {
+		logger.Error("startup: %v", err)
 		fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
 		os.Exit(2)
 	}
@@ -57,14 +68,15 @@ func main() {
 	}
 
 	if query == "" {
-		if err := tui.Run(cfg, os.Stderr); err != nil {
+		if err := tui.Run(cfg, logger); err != nil {
+			logger.Error("tui: %v", err)
 			fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
 			os.Exit(2)
 		}
 		return
 	}
 
-	os.Exit(runCLISearch(cfg, opts, query))
+	os.Exit(runCLISearch(cfg, opts, query, logger))
 }
 
 // cliOptions are parsed command-line options.
@@ -73,11 +85,14 @@ type cliOptions struct {
 	configPath string
 	limit      int
 	format     string
+	debug      bool
 }
 
 // parseArgs returns the options and the positional query ("" for TUI
-// mode). A nil *cliOptions with nil error means help/version was printed.
-func parseArgs(args []string) (*cliOptions, string, error) {
+// mode). done is true when help or version output has already been
+// printed and the caller should exit successfully. A nil *cliOptions
+// with done=false and nil error is a request to print usage.
+func parseArgs(args []string) (*cliOptions, string, bool, error) {
 	opts := &cliOptions{
 		dictionary: "",
 		format:     "",
@@ -96,61 +111,64 @@ func parseArgs(args []string) (*cliOptions, string, error) {
 				query = rest[0]
 			}
 			if positional > 0 {
-				return nil, "", fmt.Errorf("expected exactly one query argument")
+				return nil, "", false, fmt.Errorf("expected exactly one query argument")
 			}
 			goto done
 		case arg == "-h" || arg == "--help":
-			return nil, "", nil
+			fmt.Fprint(os.Stdout, usage)
+			return nil, "", true, nil
 		case arg == "-v" || arg == "--version":
 			fmt.Fprintf(os.Stdout, "ejquick %s\n", version)
-			return nil, "", nil
+			return nil, "", true, nil
 		case arg == "-d" || arg == "--dictionary":
 			v, err := nextValue(args, &i, arg)
 			if err != nil {
-				return nil, "", err
+				return nil, "", false, err
 			}
 			dt, err := dictionary.ParseType(v)
 			if err != nil {
-				return nil, "", fmt.Errorf("--dictionary: %w", err)
+				return nil, "", false, fmt.Errorf("--dictionary: %w", err)
 			}
 			opts.dictionary = dt
 		case arg == "-c" || arg == "--config":
 			v, err := nextValue(args, &i, arg)
 			if err != nil {
-				return nil, "", err
+				return nil, "", false, err
 			}
 			opts.configPath = v
 		case arg == "--limit":
 			v, err := nextValue(args, &i, arg)
 			if err != nil {
-				return nil, "", err
+				return nil, "", false, err
 			}
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 1 || n > search.HardMaxResults {
-				return nil, "", fmt.Errorf("--limit must be 1..%d", search.HardMaxResults)
+				return nil, "", false, fmt.Errorf("--limit must be 1..%d", search.HardMaxResults)
 			}
 			opts.limit = n
 		case arg == "--format":
 			v, err := nextValue(args, &i, arg)
 			if err != nil {
-				return nil, "", err
+				return nil, "", false, err
 			}
 			if v != "plain" && v != "jsonl" {
-				return nil, "", fmt.Errorf("--format must be plain or jsonl")
+				return nil, "", false, fmt.Errorf("--format must be plain or jsonl")
 			}
 			opts.format = v
+		case arg == "--debug":
+			opts.debug = true
 		case strings.HasPrefix(arg, "-"):
-			return nil, "", fmt.Errorf("unknown option %q", arg)
+			return nil, "", false, fmt.Errorf("unknown option %q", arg)
 		default:
 			positional++
 			if positional > 1 {
-				return nil, "", fmt.Errorf("expected exactly one query argument, got multiple")
+				return nil, "", false, fmt.Errorf("expected exactly one query argument, got multiple")
 			}
 			query = arg
 		}
 	}
 done:
-	return opts, query, nil
+	return opts, query, false, nil
 }
 
 // nextValue consumes the value that follows a value-taking option.
@@ -179,7 +197,7 @@ func loadConfig(path string) (*config.Config, error) {
 
 // runCLISearch executes one search and prints the results. It returns
 // the process exit code.
-func runCLISearch(cfg *config.Config, opts *cliOptions, query string) int {
+func runCLISearch(cfg *config.Config, opts *cliOptions, query string, logger *logging.Logger) int {
 	dt := opts.dictionary
 	if dt == "" {
 		dt = cfg.DefaultDict()
@@ -187,6 +205,7 @@ func runCLISearch(cfg *config.Config, opts *cliOptions, query string) int {
 
 	repo, err := search.OpenRepository(cfg.Database(dt), dt)
 	if err != nil {
+		logger.Error("cli: open %s: %v", dt, err)
 		fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
 		return 2
 	}
@@ -194,12 +213,17 @@ func runCLISearch(cfg *config.Config, opts *cliOptions, query string) int {
 
 	svc, err := search.NewService(repo, cfg.Search.MaxResults)
 	if err != nil {
+		logger.Error("cli: service: %v", err)
 		fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
 		return 2
 	}
 
+	start := time.Now()
 	entries, err := svc.Search(context.Background(), query)
+	logger.Debug("cli search dict=%s query=%q results=%d elapsed=%s",
+		dt, query, len(entries), time.Since(start).Round(time.Microsecond))
 	if err != nil {
+		logger.Error("cli: search %q: %v", query, err)
 		fmt.Fprintf(os.Stderr, "ejquick: %v\n", err)
 		return 2
 	}

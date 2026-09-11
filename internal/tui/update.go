@@ -34,9 +34,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if ctxCanceled(msg.err) {
 				return m, nil
 			}
-			if m.logErr != nil {
-				m.logErr(msg.err)
-			}
+			// Log the full detail once for the current request only.
+			m.logger.Error("search dict=%s request=%d query=%q: %v",
+				m.Dictionary, msg.requestID, m.Query, msg.err)
 			m.SearchError = msg.err.Error()
 			m.clearResults()
 			return m, nil
