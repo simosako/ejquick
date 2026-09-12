@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ type Dictionary struct {
 type Search struct {
 	// DefaultDictionary is "eiji" or "waei".
 	DefaultDictionary string `toml:"default_dictionary"`
-	// MaxResults is the result limit, 1..500. Zero means the default.
+	// MaxResults is the result limit, 1..500.
 	MaxResults int `toml:"max_results"`
 }
 
@@ -33,6 +34,17 @@ type Config struct {
 	Eiji   Dictionary `toml:"eiji"`
 	Waei   Dictionary `toml:"waei"`
 	Search Search     `toml:"search"`
+}
+
+type rawSearch struct {
+	DefaultDictionary string `toml:"default_dictionary"`
+	MaxResults        *int   `toml:"max_results"`
+}
+
+type rawConfig struct {
+	Eiji   Dictionary `toml:"eiji"`
+	Waei   Dictionary `toml:"waei"`
+	Search rawSearch  `toml:"search"`
 }
 
 // DefaultPath returns the default configuration file path:
@@ -53,9 +65,21 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
-	var cfg Config
-	if err := toml.Unmarshal(data, &cfg); err != nil {
+	var raw rawConfig
+	decoder := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	cfg := Config{
+		Eiji: raw.Eiji,
+		Waei: raw.Waei,
+		Search: Search{
+			DefaultDictionary: raw.Search.DefaultDictionary,
+			MaxResults:        search.DefaultMaxResults,
+		},
+	}
+	if raw.Search.MaxResults != nil {
+		cfg.Search.MaxResults = *raw.Search.MaxResults
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("config %s: %w", path, err)
@@ -89,7 +113,7 @@ func (c *Config) validate() error {
 			return fmt.Errorf("search.default_dictionary: %w", err)
 		}
 	}
-	if c.Search.MaxResults < 0 || c.Search.MaxResults > search.HardMaxResults {
+	if c.Search.MaxResults < 1 || c.Search.MaxResults > search.HardMaxResults {
 		return fmt.Errorf("search.max_results %d out of range 1..%d",
 			c.Search.MaxResults, search.HardMaxResults)
 	}

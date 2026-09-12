@@ -53,6 +53,9 @@ type Stats struct {
 func Run(opts Options) (Stats, error) {
 	start := time.Now()
 	var stats Stats
+	if opts.Progress == nil {
+		opts.Progress = io.Discard
+	}
 
 	if !dictionary.IsValid(opts.Type) {
 		return stats, fmt.Errorf("invalid dictionary type %q", opts.Type)
@@ -474,9 +477,6 @@ func phaseDone(w io.Writer, name string)  { fmt.Fprintf(w, "%s: done\n", name) }
 
 // writeSummary prints the fixed-line completion summary.
 func writeSummary(w io.Writer, stats Stats) {
-	if w == nil {
-		return
-	}
 	fmt.Fprintf(w, "Source lines: %d\n", stats.SourceLines)
 	fmt.Fprintf(w, "Entries: %d\n", stats.Entries)
 	fmt.Fprintf(w, "Skipped: %d\n", stats.Skipped)

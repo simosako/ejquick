@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,8 +92,13 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		body string
 	}{
 		{"bad dictionary", "[search]\ndefault_dictionary = \"en\"\n"},
+		{"max results zero", "[search]\nmax_results = 0\n"},
 		{"max results too large", "[search]\nmax_results = 501\n"},
 		{"max results negative", "[search]\nmax_results = -1\n"},
+		{"unknown top-level key", "unexpected = true\n"},
+		{"unknown section", "[display]\ncolor = true\n"},
+		{"unknown search key", "[search]\nunexpected = true\n"},
+		{"misspelled search key", "[search]\nmax_result = 10\n"},
 		{"parse error", "[search\nbroken"},
 	}
 	for _, tt := range tests {
@@ -100,6 +106,21 @@ func TestLoadRejectsBadValues(t *testing.T) {
 			p := writeConfig(t, tt.body)
 			if _, err := config.Load(p); err == nil {
 				t.Errorf("Load unexpectedly succeeded for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsMaxResultsBoundaries(t *testing.T) {
+	for _, maxResults := range []int{1, 500} {
+		t.Run(fmt.Sprintf("max_results_%d", maxResults), func(t *testing.T) {
+			p := writeConfig(t, fmt.Sprintf("[search]\nmax_results = %d\n", maxResults))
+			cfg, err := config.Load(p)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Search.MaxResults != maxResults {
+				t.Errorf("max results = %d, want %d", cfg.Search.MaxResults, maxResults)
 			}
 		})
 	}

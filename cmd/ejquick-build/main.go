@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/simosako/ejquick/internal/builder"
@@ -32,36 +33,34 @@ Exit codes: 0 success, 1 usage error, 2 build failure.
 `
 
 func main() {
-	opts, done, err := parseArgs(os.Args[1:])
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	opts, done, err := parseArgs(args, stdout, stderr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ejquick-build: %v\n\n%s", err, usage)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "ejquick-build: %v\n\n%s", err, usage)
+		return 1
 	}
 	if done {
-		return
-	}
-	if opts == nil {
-		fmt.Fprint(os.Stdout, usage)
-		return
+		return 0
 	}
 
 	builder.SetVersion(version)
-	stats, err := builder.Run(*opts)
+	_, err = builder.Run(*opts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ejquick-build: %v\n", err)
-		os.Exit(2)
+		fmt.Fprintf(stderr, "ejquick-build: %v\n", err)
+		return 2
 	}
-	_ = stats
+	return 0
 }
 
 // parseArgs returns the options, or done=true when help or version
-// output has already been printed (the caller should exit 0). A nil
-// *builder.Options with done=false and nil error is a request to print
-// usage.
-func parseArgs(args []string) (*builder.Options, bool, error) {
+// output has already been printed (the caller should exit 0).
+func parseArgs(args []string, stdout, stderr io.Writer) (*builder.Options, bool, error) {
 	fs := flag.NewFlagSet("ejquick-build", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+	fs.SetOutput(stderr)
+	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 
 	var (
 		typeStr  = fs.String("type", "", "dictionary type: eiji or waei")
@@ -78,11 +77,11 @@ func parseArgs(args []string) (*builder.Options, bool, error) {
 		return nil, false, err
 	}
 	if *help || *helpLong {
-		fmt.Fprint(os.Stdout, usage)
+		fmt.Fprint(stdout, usage)
 		return nil, true, nil
 	}
 	if *ver || *verLong {
-		fmt.Fprintf(os.Stdout, "ejquick-build %s\n", version)
+		fmt.Fprintf(stdout, "ejquick-build %s\n", version)
 		return nil, true, nil
 	}
 
@@ -106,6 +105,6 @@ func parseArgs(args []string) (*builder.Options, bool, error) {
 		Output:   *output,
 		Force:    *force,
 		Compact:  *compact,
-		Progress: os.Stderr,
+		Progress: stderr,
 	}, false, nil
 }

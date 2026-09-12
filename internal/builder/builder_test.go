@@ -120,6 +120,25 @@ func TestBuildBasicDatabase(t *testing.T) {
 	})
 }
 
+func TestBuildNilProgressDisablesOutput(t *testing.T) {
+	dir := t.TempDir()
+	input := writeFixture(t, dir, "EIJIRO1-0.TXT", encodeCP932Lines(t, []string{
+		"alpha : first letter",
+	}))
+
+	stats, err := builder.Run(builder.Options{
+		Type:   dictionary.Eiji,
+		Input:  input,
+		Output: filepath.Join(dir, "eiji.sqlite3"),
+	})
+	if err != nil {
+		t.Fatalf("Run with nil Progress: %v", err)
+	}
+	if stats.Entries != 1 {
+		t.Errorf("entries = %d, want 1", stats.Entries)
+	}
+}
+
 func TestBuildSkipsKeepIDGaps(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "WAEIJI1-0.TXT", encodeCP932Lines(t, []string{
