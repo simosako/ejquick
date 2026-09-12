@@ -212,10 +212,14 @@ func loadConfig(path string, explicit bool) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(defaultPath); err == nil {
-		return config.Load(defaultPath)
+	return loadDefaultConfig(defaultPath, os.Stat)
+}
+
+func loadDefaultConfig(path string, stat func(string) (os.FileInfo, error)) (*config.Config, error) {
+	if _, err := stat(path); err == nil {
+		return config.Load(path)
 	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("stat default config %s: %w", defaultPath, err)
+		return nil, fmt.Errorf("stat default config %s: %w", path, err)
 	}
 	return config.Defaults(), nil
 }

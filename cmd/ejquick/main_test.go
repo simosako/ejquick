@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -386,20 +385,18 @@ func TestLoadConfigReturnsDefaultPathError(t *testing.T) {
 }
 
 func TestLoadConfigReturnsDefaultPathStatError(t *testing.T) {
-	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
-	if err := os.WriteFile(notDirectory, []byte("file"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	switch runtime.GOOS {
-	case "windows":
-		t.Setenv("AppData", notDirectory)
-	case "darwin":
-		t.Setenv("HOME", notDirectory)
-	default:
-		t.Setenv("XDG_CONFIG_HOME", notDirectory)
+	defaultPath := filepath.Join(t.TempDir(), "config.toml")
+	statErr := fmt.Errorf("injected stat error")
+	stat := func(path string) (os.FileInfo, error) {
+		if path != defaultPath {
+			t.Fatalf("stat path = %q, want %q", path, defaultPath)
+		}
+		return nil, statErr
 	}
 
-	if _, err := loadConfig("", false); err == nil || !strings.Contains(err.Error(), "stat default config") {
+	if _, err := loadDefaultConfig(defaultPath, stat); err == nil ||
+		!strings.Contains(err.Error(), "stat default config") ||
+		!strings.Contains(err.Error(), statErr.Error()) {
 		t.Fatalf("loadConfig error = %v, want stat error", err)
 	}
 }
