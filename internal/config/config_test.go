@@ -22,18 +22,25 @@ func writeConfig(t *testing.T, body string) string {
 }
 
 func TestLoadFullConfig(t *testing.T) {
-	home, _ := os.UserHomeDir()
-	p := writeConfig(t, `
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	absoluteDB, err := filepath.Abs(filepath.Join("absolute", "waei.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := writeConfig(t, fmt.Sprintf(`
 [eiji]
 database = "~/.local/share/ejquick/eiji.sqlite3"
 
 [waei]
-database = "/absolute/waei.sqlite3"
+database = %q
 
 [search]
 default_dictionary = "waei"
 max_results = 100
-`)
+`, absoluteDB))
 	cfg, err := config.Load(p)
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -41,7 +48,7 @@ max_results = 100
 	if cfg.Database(dictionary.Eiji) != filepath.Join(home, ".local", "share", "ejquick", "eiji.sqlite3") {
 		t.Errorf("eiji db = %q", cfg.Database(dictionary.Eiji))
 	}
-	if cfg.Database(dictionary.Waei) != "/absolute/waei.sqlite3" {
+	if cfg.Database(dictionary.Waei) != absoluteDB {
 		t.Errorf("waei db = %q", cfg.Database(dictionary.Waei))
 	}
 	if cfg.DefaultDict() != dictionary.Waei {

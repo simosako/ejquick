@@ -261,15 +261,8 @@ func TestBuildRejectsInputAsOutput(t *testing.T) {
 			name:  "relative path",
 			force: true,
 			outputPath: func(t *testing.T, input string) string {
-				wd, err := os.Getwd()
-				if err != nil {
-					t.Fatal(err)
-				}
-				rel, err := filepath.Rel(wd, input)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return rel
+				t.Chdir(filepath.Dir(input))
+				return filepath.Base(input)
 			},
 		},
 		{

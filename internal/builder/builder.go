@@ -462,16 +462,17 @@ func validateFTSSmoke(db *sql.DB) error {
 // publish syncs the temporary file and atomically renames it over the
 // output path, then syncs the directory when the OS supports it.
 func publish(tmpPath, output string) error {
-	f, err := os.Open(tmpPath)
+	f, err := os.OpenFile(tmpPath, os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("open temporary for sync: %w", err)
 	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return fmt.Errorf("sync temporary database: %w", err)
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	if syncErr != nil {
+		return fmt.Errorf("sync temporary database: %w", syncErr)
 	}
-	if err := f.Close(); err != nil {
-		return err
+	if closeErr != nil {
+		return closeErr
 	}
 	if err := os.Rename(tmpPath, output); err != nil {
 		return fmt.Errorf("rename over output: %w", err)
