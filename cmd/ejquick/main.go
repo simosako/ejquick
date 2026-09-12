@@ -96,7 +96,7 @@ func run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	return runCLISearch(cfg, opts, query, logger, stdout, stderr)
+	return runCLISearch(cfg, opts, query, normalized, logger, stdout, stderr)
 }
 
 // cliOptions are parsed command-line options.
@@ -222,7 +222,7 @@ func loadConfig(path string, explicit bool) (*config.Config, error) {
 
 // runCLISearch executes one search and prints the results. It returns
 // the process exit code.
-func runCLISearch(cfg *config.Config, opts *cliOptions, query string, logger *logging.Logger, stdout, stderr io.Writer) int {
+func runCLISearch(cfg *config.Config, opts *cliOptions, query, normalizedQuery string, logger *logging.Logger, stdout, stderr io.Writer) int {
 	dt := opts.dictionary
 	if dt == "" {
 		dt = cfg.DefaultDict()
@@ -245,13 +245,14 @@ func runCLISearch(cfg *config.Config, opts *cliOptions, query string, logger *lo
 
 	start := time.Now()
 	entries, err := svc.Search(context.Background(), query)
-	logger.Debug("cli search dict=%s query=%q results=%d elapsed=%s",
-		dt, query, len(entries), time.Since(start).Round(time.Microsecond))
+	const requestID = 1
 	if err != nil {
-		logger.Error("cli: search %q: %v", query, err)
+		logger.Error("cli search dict=%s request=%d query=%q: %v", dt, requestID, normalizedQuery, err)
 		fmt.Fprintf(stderr, "ejquick: %v\n", err)
 		return 2
 	}
+	logger.Debug("cli search dict=%s request=%d query=%q results=%d elapsed=%s",
+		dt, requestID, normalizedQuery, len(entries), time.Since(start).Round(time.Microsecond))
 	if len(entries) == 0 {
 		return 1
 	}

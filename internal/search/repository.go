@@ -55,7 +55,7 @@ func (r *Repository) Close() error { return r.db.Close() }
 func (r *Repository) Dictionary() dictionary.Type { return r.dt }
 
 // verifySchema checks the startup invariants from the design: required
-// tables, schema version, dictionary type, and normalization/FTS versions.
+// tables and indexes, metadata versions, and a read-only FTS query.
 func verifySchema(db *sql.DB, dt dictionary.Type) error {
 	for _, table := range []string{"entries", "entries_fts", "metadata"} {
 		var name string
@@ -64,6 +64,13 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 			table).Scan(&name); err != nil {
 			return fmt.Errorf("missing table %s: %w", table, err)
 		}
+	}
+	var indexName string
+	if err := db.QueryRow(
+		`SELECT name FROM sqlite_master
+		 WHERE type = 'index' AND tbl_name = 'entries' AND name = ?`,
+		"idx_entries_headword_norm").Scan(&indexName); err != nil {
+		return fmt.Errorf("missing index idx_entries_headword_norm: %w", err)
 	}
 	want := map[string]string{
 		"schema_version":        "1",
@@ -91,6 +98,12 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 		if got[k] != w {
 			return fmt.Errorf("metadata %s = %q, want %q (rebuild the database)", k, got[k], w)
 		}
+	}
+	var ftsCount int64
+	if err := db.QueryRow(
+		"SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?",
+		`"ejquick-startup-smoke"`).Scan(&ftsCount); err != nil {
+		return fmt.Errorf("fts smoke query: %w", err)
 	}
 	return nil
 }

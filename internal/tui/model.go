@@ -17,9 +17,10 @@ import (
 // searchResultMsg carries the outcome of one asynchronous search. The
 // request ID lets Update drop results of superseded requests.
 type searchResultMsg struct {
-	requestID uint64
-	entries   []search.Entry
-	err       error
+	requestID       uint64
+	normalizedQuery string
+	entries         []search.Entry
+	err             error
 }
 
 // unavailableMsg reports a dictionary that cannot be used at startup.
@@ -104,25 +105,23 @@ func (m *Model) Init() tea.Cmd {
 
 // searchCmd starts one asynchronous search. The returned command carries
 // the request ID so stale results can be identified, and logs the
-// outcome at debug level with the elapsed time.
-func (m *Model) searchCmd(ctx context.Context, requestID uint64, query string) tea.Cmd {
+// successful outcome at debug level with the elapsed time.
+func (m *Model) searchCmd(ctx context.Context, requestID uint64, rawQuery, normalizedQuery string) tea.Cmd {
 	svc := m.services[m.Dictionary]
 	dict := m.Dictionary
 	logger := m.logger
 	return func() tea.Msg {
 		start := time.Now()
-		entries, err := svc.Search(ctx, query)
-		if err != nil {
-			logger.Debug("search dict=%s request=%d query=%q interrupted elapsed=%s",
-				dict, requestID, query, time.Since(start).Round(time.Microsecond))
-		} else {
+		entries, err := svc.Search(ctx, rawQuery)
+		if err == nil {
 			logger.Debug("search dict=%s request=%d query=%q results=%d elapsed=%s",
-				dict, requestID, query, len(entries), time.Since(start).Round(time.Microsecond))
+				dict, requestID, normalizedQuery, len(entries), time.Since(start).Round(time.Microsecond))
 		}
 		return searchResultMsg{
-			requestID: requestID,
-			entries:   entries,
-			err:       err,
+			requestID:       requestID,
+			normalizedQuery: normalizedQuery,
+			entries:         entries,
+			err:             err,
 		}
 	}
 }
@@ -132,7 +131,7 @@ func (m *Model) searchCmd(ctx context.Context, requestID uint64, query string) t
 // ordering: 1) new ID becomes current, 2) cancel previous, 3) new
 // context stored, 4) command issued. An empty normalized query clears
 // the result state without running a database query.
-func (m *Model) startSearch(query string) tea.Cmd {
+func (m *Model) startSearch(rawQuery, normalizedQuery string) tea.Cmd {
 	m.RequestID++
 	if m.CancelSearch != nil {
 		m.CancelSearch()
@@ -141,14 +140,14 @@ func (m *Model) startSearch(query string) tea.Cmd {
 	m.SearchError = ""
 	m.StatusWarning = ""
 
-	if query == "" {
+	if normalizedQuery == "" {
 		m.clearResults()
 		return nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.CancelSearch = cancel
-	return m.searchCmd(ctx, m.RequestID, query)
+	return m.searchCmd(ctx, m.RequestID, rawQuery, normalizedQuery)
 }
 
 // clearResults resets everything derived from a search result.

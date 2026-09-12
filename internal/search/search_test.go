@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/simosako/ejquick/internal/builder"
@@ -301,6 +302,56 @@ func TestOpenRepositoryRejectsWrongDictionary(t *testing.T) {
 	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
 	if _, err := search.OpenRepository(db, dictionary.Waei); err == nil {
 		t.Error("opening an eiji database as waei unexpectedly succeeded")
+	}
+}
+
+func TestOpenRepositoryRejectsMissingPrefixIndex(t *testing.T) {
+	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP INDEX idx_entries_headword_norm"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	if repo != nil {
+		repo.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "idx_entries_headword_norm") {
+		t.Fatalf("OpenRepository error = %v, want missing prefix index", err)
+	}
+}
+
+func TestOpenRepositoryRejectsInvalidFTSTable(t *testing.T) {
+	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP TABLE entries_fts"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE entries_fts (headword_norm TEXT)"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	if repo != nil {
+		repo.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "fts smoke query") {
+		t.Fatalf("OpenRepository error = %v, want FTS smoke query failure", err)
 	}
 }
 

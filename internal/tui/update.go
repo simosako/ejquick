@@ -36,7 +36,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Log the full detail once for the current request only.
 			m.logger.Error("search dict=%s request=%d query=%q: %v",
-				m.Dictionary, msg.requestID, m.Query, msg.err)
+				m.Dictionary, msg.requestID, msg.normalizedQuery, msg.err)
 			m.SearchError = msg.err.Error()
 			m.clearResults()
 			return m, nil
@@ -152,14 +152,15 @@ func (m *Model) handleKey(msg keyMsg) (tea.Model, tea.Cmd) {
 // lastSearchedQuery remembers the query string of the current request so
 // no-op edits do not restart a search.
 func (m *Model) startSearchIfChanged() tea.Cmd {
-	if normQuery, _ := normalize.Normalize(m.Dictionary, m.Query); normQuery == "" {
-		return m.startSearch("")
+	normQuery, _ := normalize.Normalize(m.Dictionary, m.Query)
+	if normQuery == "" {
+		return m.startSearch(m.Query, "")
 	}
 	// Any content change restarts: identical strings would only occur
 	// for pure whitespace/normalization rewrites, and those clear the
 	// view anyway. Re-running the search is harmless and keeps the logic
 	// simple.
-	return m.startSearch(m.Query)
+	return m.startSearch(m.Query, normQuery)
 }
 
 // ctxCanceled reports whether err wraps context.Canceled.

@@ -92,11 +92,11 @@ func (m *Model) leftWidth() int {
 // detailPageStep is one PageUp/PageDown step: page height minus one
 // overlapping row.
 func (m *Model) detailPageStep() int {
-	h := m.detailHeight() - scrollOverlap
-	if h < 1 {
-		h = 1
+	step := m.detailVisibleBodyRows(m.detailBodyLineCount()) - scrollOverlap
+	if step < 1 {
+		step = 1
 	}
-	return h
+	return step
 }
 
 // detailHeight is the body height of the right pane: pane height minus
@@ -107,6 +107,27 @@ func (m *Model) detailHeight() int {
 		h = 1
 	}
 	return h
+}
+
+// detailVisibleBodyRows returns the body rows left after reserving the
+// scroll indicator. Rendering, paging, and clamping must use this value.
+func (m *Model) detailVisibleBodyRows(total int) int {
+	rows := m.detailHeight()
+	if total > rows {
+		rows--
+	}
+	if rows < 0 {
+		return 0
+	}
+	return rows
+}
+
+func (m *Model) detailBodyLineCount() int {
+	if m.Selected < 0 || m.Selected >= len(m.Results) {
+		return 0
+	}
+	width := m.Width - 1 - m.leftWidth()
+	return len(wrapToWidth(m.Results[m.Selected].Body, width))
 }
 
 // renderPanes draws the two-pane area row by row.
@@ -187,11 +208,8 @@ func (m *Model) renderRightRows(w int) []string {
 	total := len(bodyLines)
 
 	// Body window; reserve one row for the scroll indicator when needed.
-	avail := m.detailHeight()
-	needIndicator := total > avail
-	if needIndicator {
-		avail--
-	}
+	needIndicator := total > m.detailHeight()
+	avail := m.detailVisibleBodyRows(total)
 	off := m.DetailOffset
 	if off > total {
 		off = total
@@ -240,20 +258,76 @@ func (m *Model) renderStatus() string {
 
 // renderQueryRow draws the prompt, query text, and cursor.
 func (m *Model) renderQueryRow() string {
+	if m.Width <= 0 {
+		return ""
+	}
+	if m.Width == 1 {
+		return ">"
+	}
+
 	gs := splitGraphemes(m.Query)
+	cursor := m.QueryCursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(gs) {
+		cursor = len(gs)
+	}
+	start, end := queryViewport(gs, cursor, m.Width-2)
 	var b strings.Builder
 	b.WriteString("> ")
-	for i, g := range gs {
-		if i == m.QueryCursor {
-			b.WriteString(styleReverse + g + styleReset)
+	for i := start; i < end; i++ {
+		g := gs[i]
+		if i == cursor {
+			b.WriteString(styleReverse + g)
+			if uniseg.StringWidth(g) == 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(styleReset)
 		} else {
 			b.WriteString(g)
 		}
 	}
-	if m.QueryCursor >= len(gs) {
+	if cursor == len(gs) {
 		b.WriteString(styleReverse + " " + styleReset)
 	}
 	return b.String()
+}
+
+// queryViewport selects a display-width-bounded grapheme range containing
+// the cursor. It favors text before the cursor, then fills remaining space
+// with following text.
+func queryViewport(gs []string, cursor, maxWidth int) (int, int) {
+	if maxWidth <= 0 {
+		return cursor, cursor
+	}
+	used := 1 // the end cursor or a zero-width cluster occupies one column
+	end := cursor
+	if cursor < len(gs) {
+		used = uniseg.StringWidth(gs[cursor])
+		if used < 1 {
+			used = 1
+		}
+		end++
+	}
+	start := cursor
+	for start > 0 {
+		w := uniseg.StringWidth(gs[start-1])
+		if used+w > maxWidth {
+			break
+		}
+		start--
+		used += w
+	}
+	for end < len(gs) {
+		w := uniseg.StringWidth(gs[end])
+		if used+w > maxWidth {
+			break
+		}
+		used += w
+		end++
+	}
+	return start, end
 }
 
 // clampDetailOffset keeps the detail scroll position valid, reserving one
@@ -263,14 +337,12 @@ func (m *Model) clampDetailOffset() {
 		m.DetailOffset = 0
 	}
 	if m.Selected < 0 || m.Selected >= len(m.Results) {
+		m.DetailOffset = 0
 		return
 	}
 	body := wrapToWidth(m.Results[m.Selected].Body, m.Width-1-m.leftWidth())
 	total := len(body)
-	avail := m.detailHeight()
-	if total > avail {
-		avail--
-	}
+	avail := m.detailVisibleBodyRows(total)
 	max := total - avail
 	if max < 0 {
 		max = 0
@@ -296,25 +368,26 @@ func truncateToWidth(s string, max int) string {
 	if max <= 0 {
 		return ""
 	}
+	if uniseg.StringWidth(s) <= max {
+		return s
+	}
 	var b strings.Builder
 	width := 0
 	state := -1
 	rest := s
+	contentWidth := max - 1 // reserve one column for the ellipsis
 	for len(rest) > 0 {
 		var cluster string
 		var w int
 		cluster, w, state = nextCluster(rest, state)
-		if width+w > max {
-			// Try to fit an ellipsis within the budget.
-			if width+1 <= max {
-				b.WriteString("…")
-			}
-			return b.String()
+		if width+w > contentWidth {
+			break
 		}
 		b.WriteString(cluster)
 		width += w
 		rest = rest[len(cluster):]
 	}
+	b.WriteString("…")
 	return b.String()
 }
 

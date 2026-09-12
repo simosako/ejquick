@@ -16,6 +16,7 @@ import (
 
 	"github.com/simosako/ejquick/internal/builder"
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/logging"
 )
 
 func TestParseArgsTracksQueryPresence(t *testing.T) {
@@ -181,6 +182,36 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 				t.Errorf("stderr = %q, want empty", stderr.String())
 			}
 		})
+	}
+}
+
+func TestRunCLIDebugLogUsesNormalizedQueryAndRequestID(t *testing.T) {
+	setTestAppDirs(t)
+	dbPath := buildTestDatabase(t)
+	configPath := writeTestConfig(t, dbPath)
+	logPath, err := logging.DefaultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--debug", "--config", configPath, " ALPHA "}, panicReader{}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(data)
+	if strings.Count(logText, " DEBUG ") != 1 || strings.Contains(logText, " ERROR ") {
+		t.Fatalf("log = %q, want one DEBUG line", logText)
+	}
+	if !strings.Contains(logText, `cli search dict=eiji request=1 query="alpha" results=1`) {
+		t.Errorf("log missing normalized query or request ID: %q", logText)
+	}
+	if strings.Contains(logText, " ALPHA ") {
+		t.Errorf("log contains raw query: %q", logText)
 	}
 }
 

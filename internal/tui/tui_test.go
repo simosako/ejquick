@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/rivo/uniseg"
 
 	"github.com/simosako/ejquick/internal/builder"
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/logging"
 	"github.com/simosako/ejquick/internal/search"
 )
 
@@ -503,4 +505,230 @@ func TestEmptyQuerySkipsDatabase(t *testing.T) {
 	if cmd != nil {
 		t.Error("whitespace query started a search")
 	}
+}
+
+func TestDetailPagingUsesOneRowOverlapAndClamps(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = 80
+	m.Height = 10
+	m.Query = "entry"
+	rightWidth := m.Width - 1 - m.leftWidth()
+	m.Results = []search.Entry{{ID: 1, Headword: "entry", Body: strings.Repeat("x", rightWidth*12)}}
+	m.Selected = 0
+
+	total := m.detailBodyLineCount()
+	visible := m.detailVisibleBodyRows(total)
+	if total != 12 || visible != m.detailHeight()-1 {
+		t.Fatalf("total = %d visible = %d detail height = %d", total, visible, m.detailHeight())
+	}
+	if got, want := m.detailPageStep(), visible-1; got != want {
+		t.Fatalf("page step = %d, want %d", got, want)
+	}
+
+	next, cmd := m.Update(key("pgup"))
+	m = modelOf(t, next)
+	if cmd != nil || m.DetailOffset != 0 {
+		t.Fatalf("PageUp at start returned cmd %v, offset %d", cmd != nil, m.DetailOffset)
+	}
+	next, cmd = m.Update(key("pgdown"))
+	m = modelOf(t, next)
+	if cmd != nil || m.DetailOffset != visible-1 {
+		t.Fatalf("PageDown returned cmd %v, offset %d; want %d", cmd != nil, m.DetailOffset, visible-1)
+	}
+
+	for range 20 {
+		m = press(t, m, "pgdown")
+	}
+	if want := total - visible; m.DetailOffset != want {
+		t.Fatalf("offset at end = %d, want %d", m.DetailOffset, want)
+	}
+
+	next, cmd = m.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+	m = modelOf(t, next)
+	if cmd != nil {
+		t.Fatal("resize returned a command")
+	}
+	total = m.detailBodyLineCount()
+	visible = m.detailVisibleBodyRows(total)
+	if want := total - visible; m.DetailOffset != want {
+		t.Fatalf("offset after resize = %d, want %d", m.DetailOffset, want)
+	}
+}
+
+func TestDetailPagingInShortPane(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = 80
+	m.Height = 7
+	m.Query = "entry"
+	rightWidth := m.Width - 1 - m.leftWidth()
+	m.Results = []search.Entry{{ID: 1, Headword: "entry", Body: strings.Repeat("x", rightWidth*3)}}
+	m.Selected = 0
+
+	if visible := m.detailVisibleBodyRows(m.detailBodyLineCount()); visible != 1 {
+		t.Fatalf("visible body rows = %d, want 1", visible)
+	}
+	if step := m.detailPageStep(); step != 1 {
+		t.Fatalf("page step = %d, want minimum step 1", step)
+	}
+	m = press(t, m, "pgdown")
+	if m.DetailOffset != 1 {
+		t.Fatalf("offset = %d, want 1", m.DetailOffset)
+	}
+}
+
+func TestRenderQueryRowKeepsCursorVisibleWithinWidth(t *testing.T) {
+	combining := "e\u0301"
+	tests := []struct {
+		name       string
+		query      string
+		cursor     int
+		wantCursor string
+		wantText   string
+		omitText   string
+	}{
+		{
+			name:       "ASCII end cursor",
+			query:      "START-" + strings.Repeat("x", 100) + "-END",
+			cursor:     110,
+			wantCursor: styleReverse + " " + styleReset,
+			wantText:   "-END",
+			omitText:   "START-",
+		},
+		{
+			name:       "wide cursor cluster",
+			query:      strings.Repeat("界", 50) + "語" + strings.Repeat("界", 50),
+			cursor:     50,
+			wantCursor: styleReverse + "語" + styleReset,
+		},
+		{
+			name:       "combining cursor cluster",
+			query:      strings.Repeat("a", 100) + combining + strings.Repeat("b", 100),
+			cursor:     100,
+			wantCursor: styleReverse + combining + styleReset,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(dictionary.Eiji, nil, nil, nil)
+			m.Width = 80
+			m.Query = tt.query
+			m.QueryCursor = tt.cursor
+			row := m.renderQueryRow()
+			if strings.ContainsRune(row, '\n') {
+				t.Fatalf("query row wrapped: %q", row)
+			}
+			if width := uniseg.StringWidth(stripANSI(row)); width > m.Width {
+				t.Fatalf("query row width = %d, terminal width = %d", width, m.Width)
+			}
+			if !strings.Contains(row, tt.wantCursor) {
+				t.Errorf("query row does not show cursor cluster: %q", row)
+			}
+			if tt.wantText != "" && !strings.Contains(row, tt.wantText) {
+				t.Errorf("query row = %q, want text %q", row, tt.wantText)
+			}
+			if tt.omitText != "" && strings.Contains(row, tt.omitText) {
+				t.Errorf("query row = %q, unexpectedly contains clipped text %q", row, tt.omitText)
+			}
+		})
+	}
+}
+
+func TestTruncateToWidthAlwaysAddsEllipsis(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		max  int
+		want string
+	}{
+		{name: "exact ASCII width", in: "abcdef", max: 6, want: "abcdef"},
+		{name: "ASCII overflow", in: "abcdefg", max: 6, want: "abcde…"},
+		{name: "exact wide width", in: "界界界", max: 6, want: "界界界"},
+		{name: "wide overflow", in: "界界界a", max: 6, want: "界界…"},
+		{name: "combining cluster", in: "e\u0301xy", max: 2, want: "e\u0301…"},
+		{name: "ellipsis only", in: "界a", max: 1, want: "…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateToWidth(tt.in, tt.max)
+			if got != tt.want {
+				t.Errorf("truncateToWidth(%q, %d) = %q, want %q", tt.in, tt.max, got, tt.want)
+			}
+			if width := uniseg.StringWidth(got); width > tt.max {
+				t.Errorf("result width = %d, max = %d", width, tt.max)
+			}
+		})
+	}
+}
+
+func TestSearchLoggingUsesNormalizedQuery(t *testing.T) {
+	t.Run("success is one DEBUG line", func(t *testing.T) {
+		m := newTestModel(t)
+		path := filepath.Join(t.TempDir(), "debug.log")
+		logger, err := logging.OpenFile(path, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.logger = logger
+
+		next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Text: " CARE "}))
+		m = modelOf(t, next)
+		drainCmd(t, m, cmd)
+		if err := logger.Close(); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logText := string(data)
+		if strings.Count(logText, " DEBUG ") != 1 || strings.Contains(logText, " ERROR ") {
+			t.Fatalf("log = %q, want one DEBUG line", logText)
+		}
+		if !strings.Contains(logText, `request=1 query="care"`) || strings.Contains(logText, " CARE ") {
+			t.Errorf("log does not contain only the normalized query: %q", logText)
+		}
+	})
+
+	t.Run("failure is one ERROR line", func(t *testing.T) {
+		m := newTestModel(t)
+		if err := m.services[dictionary.Eiji].Close(); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "error.log")
+		logger, err := logging.OpenFile(path, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.logger = logger
+
+		next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Text: " CARE "}))
+		m = modelOf(t, next)
+		if cmd == nil {
+			t.Fatal("query did not start a search")
+		}
+		msg := cmd()
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(before) != 0 {
+			t.Fatalf("failed command logged before Update: %q", before)
+		}
+		m.Update(msg)
+		if err := logger.Close(); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logText := string(data)
+		if strings.Count(logText, " ERROR ") != 1 || strings.Contains(logText, " DEBUG ") {
+			t.Fatalf("log = %q, want one ERROR line", logText)
+		}
+		if !strings.Contains(logText, `dict=eiji request=1 query="care"`) || strings.Contains(logText, " CARE ") {
+			t.Errorf("error log does not contain only the normalized query: %q", logText)
+		}
+	})
 }

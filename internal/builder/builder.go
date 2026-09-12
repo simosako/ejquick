@@ -401,29 +401,46 @@ func validate(path string, opts Options, stats Stats) error {
 	if err != nil {
 		return fmt.Errorf("prefix smoke query: %w", err)
 	}
-	var norm string
-	if err := db.QueryRow("SELECT headword_norm FROM entries WHERE id = ?", smokeID).Scan(&norm); err != nil {
-		return fmt.Errorf("read smoke headword: %w", err)
-	}
-	// The whole normalized headword is itself a trigram-matchable
-	// substring whenever it has at least three runes.
-	runes := []rune(norm)
-	if len(runes) >= 3 {
-		ftsQuery := `"` + strings.ReplaceAll(norm, `"`, `""`) + `"`
-		var ftsCount int64
-		err = db.QueryRow(
-			`SELECT count(*) FROM entries_fts f JOIN entries e ON e.id = f.rowid
-			 WHERE entries_fts MATCH ? AND instr(e.headword_norm, ?) > 0`,
-			ftsQuery, norm).Scan(&ftsCount)
-		if err != nil {
-			return fmt.Errorf("fts smoke query: %w", err)
-		}
-		if ftsCount < 1 {
-			return fmt.Errorf("fts smoke query matched nothing for %q", norm)
-		}
+	if err := validateFTSSmoke(db); err != nil {
+		return err
 	}
 
 	phaseDone(opts.Progress, "Validation")
+	return nil
+}
+
+// validateFTSSmoke exercises the trigram index with a matchable entry when
+// one exists. Dictionaries containing only shorter entries still execute a
+// harmless bound MATCH query so a missing or invalid FTS table is detected.
+func validateFTSSmoke(db *sql.DB) error {
+	var norm string
+	err := db.QueryRow(
+		"SELECT headword_norm FROM entries WHERE length(headword_norm) >= 3 ORDER BY headword_norm LIMIT 1").
+		Scan(&norm)
+	if errors.Is(err, sql.ErrNoRows) {
+		var count int64
+		if err := db.QueryRow(
+			"SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?",
+			`"ejquick-builder-smoke"`).Scan(&count); err != nil {
+			return fmt.Errorf("fts smoke query: %w", err)
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read FTS smoke headword: %w", err)
+	}
+
+	ftsQuery := `"` + strings.ReplaceAll(norm, `"`, `""`) + `"`
+	var count int64
+	if err := db.QueryRow(
+		`SELECT count(*) FROM entries_fts f JOIN entries e ON e.id = f.rowid
+		 WHERE entries_fts MATCH ? AND instr(e.headword_norm, ?) > 0`,
+		ftsQuery, norm).Scan(&count); err != nil {
+		return fmt.Errorf("fts smoke query: %w", err)
+	}
+	if count < 1 {
+		return fmt.Errorf("fts smoke query matched nothing for %q", norm)
+	}
 	return nil
 }
 
