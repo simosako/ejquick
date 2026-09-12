@@ -72,6 +72,15 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 		"idx_entries_headword_norm").Scan(&indexName); err != nil {
 		return fmt.Errorf("missing index idx_entries_headword_norm: %w", err)
 	}
+	var indexColumn string
+	if err := db.QueryRow(
+		"SELECT name FROM pragma_index_info(?) WHERE seqno = 0",
+		indexName).Scan(&indexColumn); err != nil {
+		return fmt.Errorf("inspect index idx_entries_headword_norm: %w", err)
+	}
+	if indexColumn != "headword_norm" {
+		return fmt.Errorf("index idx_entries_headword_norm starts with %q, want headword_norm", indexColumn)
+	}
 	want := map[string]string{
 		"schema_version":        "1",
 		"dictionary_type":       dt.String(),

@@ -113,13 +113,16 @@ func (m *Model) detailHeight() int {
 // scroll indicator. Rendering, paging, and clamping must use this value.
 func (m *Model) detailVisibleBodyRows(total int) int {
 	rows := m.detailHeight()
-	if total > rows {
+	if m.detailNeedsIndicator(total) {
 		rows--
 	}
-	if rows < 0 {
-		return 0
-	}
 	return rows
+}
+
+// detailNeedsIndicator leaves at least one row for the body in a very
+// short pane, where showing both content and an indicator is impossible.
+func (m *Model) detailNeedsIndicator(total int) bool {
+	return m.detailHeight() > 1 && total > m.detailHeight()
 }
 
 func (m *Model) detailBodyLineCount() int {
@@ -208,7 +211,7 @@ func (m *Model) renderRightRows(w int) []string {
 	total := len(bodyLines)
 
 	// Body window; reserve one row for the scroll indicator when needed.
-	needIndicator := total > m.detailHeight()
+	needIndicator := m.detailNeedsIndicator(total)
 	avail := m.detailVisibleBodyRows(total)
 	off := m.DetailOffset
 	if off > total {

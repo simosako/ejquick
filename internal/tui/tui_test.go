@@ -576,6 +576,43 @@ func TestDetailPagingInShortPane(t *testing.T) {
 	}
 }
 
+func TestDetailPagingKeepsBodyRowWhenIndicatorCannotFit(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = 80
+	m.Height = 6
+	m.Query = "entry"
+	rightWidth := m.Width - 1 - m.leftWidth()
+	m.Results = []search.Entry{{
+		ID:       1,
+		Headword: "entry",
+		Body: strings.Repeat("a", rightWidth) +
+			strings.Repeat("b", rightWidth) +
+			strings.Repeat("c", rightWidth),
+	}}
+	m.Selected = 0
+
+	total := m.detailBodyLineCount()
+	if visible := m.detailVisibleBodyRows(total); visible != 1 {
+		t.Fatalf("visible body rows = %d, want 1", visible)
+	}
+	for range 10 {
+		m = press(t, m, "pgdown")
+	}
+	if want := total - 1; m.DetailOffset != want {
+		t.Fatalf("offset at end = %d, want %d", m.DetailOffset, want)
+	}
+	rows := m.renderRightRows(rightWidth)
+	if len(rows) != m.paneHeight() {
+		t.Fatalf("rendered rows = %d, pane height = %d", len(rows), m.paneHeight())
+	}
+	if rows[len(rows)-1] != strings.Repeat("c", rightWidth) {
+		t.Errorf("last body row = %q", rows[len(rows)-1])
+	}
+	if strings.Contains(strings.Join(rows, "\n"), "PageUp/PageDown") {
+		t.Errorf("indicator rendered without an available row: %q", rows)
+	}
+}
+
 func TestRenderQueryRowKeepsCursorVisibleWithinWidth(t *testing.T) {
 	combining := "e\u0301"
 	tests := []struct {
@@ -731,4 +768,43 @@ func TestSearchLoggingUsesNormalizedQuery(t *testing.T) {
 			t.Errorf("error log does not contain only the normalized query: %q", logText)
 		}
 	})
+}
+
+func TestIgnoredSearchErrorsAreNotLogged(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  searchResultMsg
+	}{
+		{
+			name: "stale error",
+			msg:  searchResultMsg{requestID: 1, normalizedQuery: "care", err: errors.New("stale")},
+		},
+		{
+			name: "current cancellation",
+			msg:  searchResultMsg{requestID: 2, normalizedQuery: "care", err: context.Canceled},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "ignored.log")
+			logger, err := logging.OpenFile(path, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := New(dictionary.Eiji, nil, nil, logger)
+			m.RequestID = 2
+			m.Update(tt.msg)
+			if err := logger.Close(); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(data) != 0 {
+				t.Errorf("ignored error was logged: %q", data)
+			}
+		})
+	}
 }
