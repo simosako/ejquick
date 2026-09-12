@@ -11,6 +11,7 @@ import (
 // Layout constants from the design.
 const (
 	minColumns    = 80
+	minRows       = 15
 	leftMinWidth  = 24
 	leftMaxWidth  = 50
 	scrollOverlap = 1 // one overlapping row between pages
@@ -26,8 +27,8 @@ var (
 
 // View implements tea.Model.
 func (m *Model) View() tea.View {
-	if m.Width < minColumns {
-		return tea.NewView(m.narrowView())
+	if m.terminalTooSmall() {
+		return tea.NewView(m.sizeWarningView())
 	}
 	var b strings.Builder
 
@@ -47,18 +48,33 @@ func (m *Model) View() tea.View {
 	return tea.NewView(b.String())
 }
 
-// narrowView replaces the two panes with a warning when the terminal is
-// narrower than the minimum width; state is kept for restoration. The
-// view is padded to the full height so no previous frame remains.
-func (m *Model) narrowView() string {
-	var b strings.Builder
-	b.WriteString(m.bold("Terminal is too narrow") + "\n\n")
-	fmt.Fprintf(&b, "EJQuick needs at least %d columns; current width is %d.\n\n", minColumns, m.Width)
-	b.WriteString(m.dim("Query and results are preserved. Widen the window to continue."))
-	for i := 4; i < m.Height; i++ {
-		b.WriteByte('\n')
+func (m *Model) terminalTooSmall() bool {
+	return m.Width < minColumns || m.Height < minRows
+}
+
+// sizeWarningView replaces the two panes with a warning when the terminal
+// is below the minimum size; state is kept for restoration. The view is
+// padded to the full height so no previous frame remains.
+func (m *Model) sizeWarningView() string {
+	rows := []string{
+		m.bold("Terminal is too small"),
+		"",
+		fmt.Sprintf("EJQuick needs at least %d columns and %d rows; current size is %dx%d.",
+			minColumns, minRows, m.Width, m.Height),
+		"",
+		m.dim("Query and results are preserved. Resize the window to continue."),
 	}
-	return b.String()
+	height := m.Height
+	if height < 1 {
+		height = 1
+	}
+	if len(rows) > height {
+		rows = rows[:height]
+	}
+	for len(rows) < height {
+		rows = append(rows, "")
+	}
+	return strings.Join(rows, "\n")
 }
 
 // paneHeight returns the number of rows available for the panes: total
@@ -87,6 +103,14 @@ func (m *Model) leftWidth() int {
 	return w
 }
 
+func (m *Model) rightWidth() int {
+	w := m.Width - 1 - m.leftWidth()
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
 // detailPageStep is one PageUp/PageDown step: page height minus one
 // overlapping row.
 func (m *Model) detailPageStep() int {
@@ -98,11 +122,15 @@ func (m *Model) detailPageStep() int {
 }
 
 // detailHeight is the body height of the right pane: pane height minus
-// the headword row and its blank separator.
+// the wrapped headword rows and their blank separator.
 func (m *Model) detailHeight() int {
-	h := m.paneHeight() - 2
-	if h < 1 {
-		h = 1
+	headerRows := len(m.detailHeadwordLines())
+	if headerRows > 0 {
+		headerRows++ // blank separator
+	}
+	h := m.paneHeight() - headerRows
+	if h < 0 {
+		h = 0
 	}
 	return h
 }
@@ -123,22 +151,27 @@ func (m *Model) detailNeedsIndicator(total int) bool {
 	return m.detailHeight() > 1 && total > m.detailHeight()
 }
 
+func (m *Model) detailHeadwordLines() []string {
+	if m.Selected < 0 || m.Selected >= len(m.Results) {
+		return nil
+	}
+	return wrapToWidth(m.Results[m.Selected].Headword, m.rightWidth())
+}
+
 func (m *Model) detailBodyLineCount() int {
 	if m.Selected < 0 || m.Selected >= len(m.Results) {
 		return 0
 	}
-	width := m.Width - 1 - m.leftWidth()
-	return len(wrapToWidth(m.Results[m.Selected].Body, width))
+	return len(wrapToWidth(m.Results[m.Selected].Body, m.rightWidth()))
 }
 
 // renderPanes draws the two-pane area row by row.
 func (m *Model) renderPanes() []string {
 	rows := make([]string, m.paneHeight())
 	lw := m.leftWidth()
-	rw := m.Width - 1 - lw
 
 	left := m.renderLeftRows()
-	right := m.renderRightRows(rw)
+	right := m.renderRightRows()
 
 	for i := 0; i < len(rows); i++ {
 		l := ""
@@ -188,7 +221,7 @@ func (m *Model) renderLeftRows() []string {
 // renderRightRows renders the detail pane: headword, blank, wrapped body,
 // and a scroll indicator when the body overflows. The indicator takes one
 // row from the body window so it always fits the pane height.
-func (m *Model) renderRightRows(w int) []string {
+func (m *Model) renderRightRows() []string {
 	if m.SearchError != "" {
 		return []string{m.bold("Search error: " + firstLine(m.SearchError))}
 	}
@@ -203,8 +236,8 @@ func (m *Model) renderRightRows(w int) []string {
 	}
 	e := m.Results[m.Selected]
 
-	head := truncateToWidth(e.Headword, w)
-	bodyLines := wrapToWidth(e.Body, w)
+	headLines := m.detailHeadwordLines()
+	bodyLines := wrapToWidth(e.Body, m.rightWidth())
 	total := len(bodyLines)
 
 	// Body window; reserve one row for the scroll indicator when needed.
@@ -220,7 +253,9 @@ func (m *Model) renderRightRows(w int) []string {
 	}
 
 	rows := make([]string, 0, m.paneHeight())
-	rows = append(rows, m.bold(head))
+	for _, line := range headLines {
+		rows = append(rows, m.bold(line))
+	}
 	rows = append(rows, "")
 	for _, l := range bodyLines[off:end] {
 		rows = append(rows, l)
@@ -339,8 +374,7 @@ func (m *Model) clampDetailOffset() {
 		m.DetailOffset = 0
 		return
 	}
-	body := wrapToWidth(m.Results[m.Selected].Body, m.Width-1-m.leftWidth())
-	total := len(body)
+	total := m.detailBodyLineCount()
 	avail := m.detailVisibleBodyRows(total)
 	max := total - avail
 	if max < 0 {

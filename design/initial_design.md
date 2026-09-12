@@ -728,13 +728,15 @@ right_width = pane_width - 1 - left_width
 
 DB fallbackや利用できない辞書へのTab操作など、利用者へ伝えるべき短い警告がある場合だけ通常の辞書名を警告文へ置き換える。警告は次の通常操作でclearし、現在の辞書名表示へ戻す。current requestの検索errorはstatusではなく右ペインへ表示し、右ペインのscroll indicatorはstatusとは別に扱う。
 
-左ペインに収まらない見出し語は末尾をellipsisで省略し、完全な見出し語は右ペイン上部に表示する。幅の計算と切り詰めはbyte数やrune数ではなくterminal上のdisplay widthを基準とし、全角文字や結合文字を途中で分断しない。ANSI stylingによる制御sequenceは表示幅へ含めない。
+左ペインに収まらない見出し語は末尾をellipsisで省略し、完全な見出し語は右ペイン上部で必要な行数へ折り返して表示する。右ペインの見出し語行数に応じて本文の表示可能行数を動的に減らす。幅の計算、切り詰め、折り返しはbyte数やrune数ではなくterminal上のdisplay widthを基準とし、全角文字や結合文字を途中で分断しない。ANSI stylingによる制御sequenceは表示幅へ含めない。
 
-terminal全幅が80 columns未満の場合は2ペインを別配置へ変更せず、terminalが狭いことと必要な最小幅を示す警告画面を表示する。query、検索結果、選択位置はmodel内に保持し、80 columns以上へ戻った際に同じ状態で2ペイン表示を復元する。resizeだけではDB queryを再実行しない。
+terminal全幅が80 columns未満、または高さが15 rows未満の場合は2ペインを別配置へ変更せず、terminalが小さいことと必要な最小サイズ `80x15` を示す警告画面を表示する。query、検索結果、選択位置はmodel内に保持し、`80x15` 以上へ戻った際に同じ状態で2ペイン表示を復元する。resizeだけではDB queryを再実行しない。
 
-右ペインの本文はペイン幅に合わせて折り返し、表示高を超える場合はPageUp / PageDownで1ページずつscrollする。1回の移動量は表示行数から1行を引いた値とし、前後のページに1行の重なりを残す。先頭と末尾を超えないようscroll位置をclampする。
+辞書version 144-10で構造マーカー除去後の見出し語を実測した結果、最大display widthは英和444 columns、和英344 columnsだった。terminal全幅80 columns時の右ペイン幅53 columnsでは、それぞれ最大9行、7行に折り返される。最小高15 rowsではペイン領域が12行となるため、最大9行の見出し語、空行、本文1行、scroll indicator 1行を同時に表示できる。この実測を最小高15 rowsの根拠とする。将来の辞書versionで最大値が増えた場合は再測定し、最小高または詳細表示方式を見直す。
 
-選択項目を変更した場合、新しい検索結果を反映した場合、またはqueryを空にした場合は、詳細scroll位置を先頭へ戻す。resize時は新しい右ペイン幅で本文を再度折り返し、現在のscroll位置を有効範囲へclampする。
+右ペインの本文はペイン幅に合わせて折り返し、見出し語の折り返し行と空行を除いた表示高を超える場合はPageUp / PageDownで1ページずつscrollする。scroll indicatorを表示する場合はさらに1行を差し引く。1回の移動量は実際の本文表示行数から1行を引いた値とし、前後のページに1行の重なりを残す。先頭と末尾を超えないようscroll位置をclampする。
+
+選択項目を変更した場合、新しい検索結果を反映した場合、またはqueryを空にした場合は、詳細scroll位置を先頭へ戻す。resize時は新しい右ペイン幅で見出し語と本文を再度折り返し、新しい見出し語行数から本文表示可能行数を再計算して、現在のscroll位置を有効範囲へclampする。
 
 右ペインの下端には、本文が表示範囲を超える場合だけ現在位置と総行数が分かるscroll indicatorを表示する。PageUp / PageDownではqueryを変更せず、DB queryや `tea.Cmd` を発行せず、検索入力のfocusも維持する。
 
@@ -1662,8 +1664,8 @@ Builderのbenchmarkでは、少なくとも以下を記録する。
 - current requestの検索errorでは前回結果をclearし、右ペインへ短いエラーを表示する
 - `Enter`なしで検索、選択、詳細確認を継続できる
 - 左幅が利用可能幅の1/3かつ24〜50 columnsとなり、右へ残りが割り当てられる
-- 全角文字、結合文字、ANSI stylingを含む見出し語をdisplay widthで安全に省略する
-- 79 columns以下では警告し、80 columns以上へ戻ると状態を保ったまま2ペインを復元する
+- 全角文字、結合文字、ANSI stylingを含む見出し語を、左ペインではdisplay widthで安全に省略し、右ペインでは完全な内容を安全に折り返す
+- 79 columns以下または14 rows以下では警告し、`80x15` 以上へ戻ると状態を保ったまま2ペインを復元する
 - resize時にDB queryを再実行しない
 - PageUp / PageDownで右本文を1行重複させてページscrollする
 - 選択変更、新しい検索結果、empty queryで詳細scroll位置を先頭へ戻す

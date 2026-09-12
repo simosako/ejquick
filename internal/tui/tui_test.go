@@ -559,29 +559,137 @@ func TestRenderLeftRowsTruncatesWideHeadwordByDisplayWidth(t *testing.T) {
 	}
 }
 
-func TestNarrowTerminalWarning(t *testing.T) {
-	m := newTestModel(t)
-	typeQuery(t, m, "care")
-	requestID := m.RequestID
-	next, cmd := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
+func TestSmallTerminalWarningPreservesState(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{name: "too narrow", width: 79, height: 24},
+		{name: "too short", width: 100, height: 14},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModel(t)
+			typeQuery(t, m, "care")
+			requestID := m.RequestID
+			next, cmd := m.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			m = modelOf(t, next)
+			if cmd != nil || m.RequestID != requestID {
+				t.Errorf("small resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+			}
+			v := m.View().Content
+			if !strings.Contains(v, "Terminal is too small") || !strings.Contains(v, "80 columns and 15 rows") {
+				t.Errorf("small view missing size warning: %q", v)
+			}
+			if rows := strings.Count(v, "\n") + 1; rows != tt.height {
+				t.Errorf("size warning rows = %d, want terminal height %d", rows, tt.height)
+			}
+			if m.Query != "care" {
+				t.Error("query lost while showing size warning")
+			}
+			next, cmd = m.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+			m = modelOf(t, next)
+			if cmd != nil || m.RequestID != requestID {
+				t.Errorf("valid resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+			}
+			if v := m.View().Content; strings.Contains(v, "Terminal is too small") || !strings.Contains(v, "care") {
+				t.Errorf("results not restored at minimum size: %q", v)
+			}
+		})
+	}
+}
+
+func TestRenderRightRowsWrapsCompleteHeadwordAndResizesBody(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = 80
+	m.Height = 15
+	m.Query = "entry"
+	rightWidth := m.rightWidth()
+	headword := strings.Repeat("h", rightWidth*2) + "tail"
+	m.Results = []search.Entry{{
+		ID:       1,
+		Headword: headword,
+		Body:     strings.Repeat("x", rightWidth*12),
+	}}
+	m.Selected = 0
+
+	headLines := m.detailHeadwordLines()
+	if len(headLines) != 3 || strings.Join(headLines, "") != headword {
+		t.Fatalf("wrapped headword = %q, want three complete rows", headLines)
+	}
+	wantDetailHeight := m.paneHeight() - len(headLines) - 1
+	if got := m.detailHeight(); got != wantDetailHeight {
+		t.Fatalf("detail height = %d, want %d", got, wantDetailHeight)
+	}
+	total := m.detailBodyLineCount()
+	visible := m.detailVisibleBodyRows(total)
+	if total != 12 || visible != wantDetailHeight-1 {
+		t.Fatalf("body total = %d visible = %d, want 12 and %d", total, visible, wantDetailHeight-1)
+	}
+	rows := m.renderRightRows()
+	if len(rows) != m.paneHeight() {
+		t.Fatalf("rendered rows = %d, want pane height %d", len(rows), m.paneHeight())
+	}
+	var renderedHeadword strings.Builder
+	for _, row := range rows[:len(headLines)] {
+		renderedHeadword.WriteString(stripANSI(row))
+	}
+	if renderedHeadword.String() != headword || strings.Contains(renderedHeadword.String(), "…") {
+		t.Errorf("rendered headword = %q, want complete headword", renderedHeadword.String())
+	}
+
+	m.DetailOffset = total
+	next, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 15})
 	m = modelOf(t, next)
-	if cmd != nil || m.RequestID != requestID {
-		t.Errorf("narrow resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+	if cmd != nil {
+		t.Fatal("resize returned a command")
 	}
-	v := m.View().Content
-	if !strings.Contains(v, "too narrow") {
-		t.Errorf("narrow view missing warning: %q", v)
+	if got := len(m.detailHeadwordLines()); got != 2 {
+		t.Fatalf("headword rows after resize = %d, want 2", got)
 	}
-	if m.Query != "care" {
-		t.Error("query lost during narrow mode")
+	total = m.detailBodyLineCount()
+	visible = m.detailVisibleBodyRows(total)
+	wantOffset := total - visible
+	if wantOffset < 0 {
+		wantOffset = 0
 	}
-	next, cmd = m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
-	m = modelOf(t, next)
-	if cmd != nil || m.RequestID != requestID {
-		t.Errorf("wide resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+	if m.DetailOffset != wantOffset {
+		t.Fatalf("offset after resize = %d, want %d", m.DetailOffset, wantOffset)
 	}
-	if v := m.View().Content; !strings.Contains(v, "care") {
-		t.Errorf("results not restored after widening: %q", v)
+}
+
+func TestMinimumSizeFitsMeasuredMaximumHeadwordWidth(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = minColumns
+	m.Height = minRows
+	m.Query = "entry"
+	m.Results = []search.Entry{{
+		ID:       1,
+		Headword: strings.Repeat("h", 444),
+		Body:     strings.Repeat("b", m.rightWidth()*3),
+	}}
+	m.Selected = 0
+
+	headLines := m.detailHeadwordLines()
+	if len(headLines) != 9 {
+		t.Fatalf("headword rows = %d, want 9", len(headLines))
+	}
+	rows := m.renderRightRows()
+	if len(rows) != m.paneHeight() {
+		t.Fatalf("rendered rows = %d, want pane height %d", len(rows), m.paneHeight())
+	}
+	var renderedHeadword strings.Builder
+	for _, row := range rows[:len(headLines)] {
+		renderedHeadword.WriteString(stripANSI(row))
+	}
+	if renderedHeadword.Len() != 444 {
+		t.Fatalf("rendered headword length = %d, want 444", renderedHeadword.Len())
+	}
+	if visible := m.detailVisibleBodyRows(m.detailBodyLineCount()); visible != 1 {
+		t.Fatalf("visible body rows = %d, want 1", visible)
+	}
+	if !strings.Contains(stripANSI(rows[len(rows)-1]), "PageUp/PageDown") {
+		t.Errorf("last row is not the scroll indicator: %q", rows[len(rows)-1])
 	}
 }
 
@@ -598,15 +706,15 @@ func TestEmptyQuerySkipsDatabase(t *testing.T) {
 func TestDetailPagingUsesOneRowOverlapAndClamps(t *testing.T) {
 	m := New(dictionary.Eiji, nil, nil, nil)
 	m.Width = 80
-	m.Height = 10
+	m.Height = 15
 	m.Query = "entry"
 	rightWidth := m.Width - 1 - m.leftWidth()
-	m.Results = []search.Entry{{ID: 1, Headword: "entry", Body: strings.Repeat("x", rightWidth*12)}}
+	m.Results = []search.Entry{{ID: 1, Headword: "entry", Body: strings.Repeat("x", rightWidth*30)}}
 	m.Selected = 0
 
 	total := m.detailBodyLineCount()
 	visible := m.detailVisibleBodyRows(total)
-	if total != 12 || visible != m.detailHeight()-1 {
+	if total != 30 || visible != m.detailHeight()-1 {
 		t.Fatalf("total = %d visible = %d detail height = %d", total, visible, m.detailHeight())
 	}
 	if got, want := m.detailPageStep(), visible-1; got != want {
@@ -631,7 +739,7 @@ func TestDetailPagingUsesOneRowOverlapAndClamps(t *testing.T) {
 		t.Fatalf("offset at end = %d, want %d", m.DetailOffset, want)
 	}
 
-	next, cmd = m.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+	next, cmd = m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	m = modelOf(t, next)
 	if cmd != nil {
 		t.Fatal("resize returned a command")
@@ -689,7 +797,7 @@ func TestDetailPagingKeepsBodyRowWhenIndicatorCannotFit(t *testing.T) {
 	if want := total - 1; m.DetailOffset != want {
 		t.Fatalf("offset at end = %d, want %d", m.DetailOffset, want)
 	}
-	rows := m.renderRightRows(rightWidth)
+	rows := m.renderRightRows()
 	if len(rows) != m.paneHeight() {
 		t.Fatalf("rendered rows = %d, pane height = %d", len(rows), m.paneHeight())
 	}
