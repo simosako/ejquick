@@ -203,6 +203,101 @@ func TestBuildOutputExistsWithoutForce(t *testing.T) {
 	assertNoTempFiles(t, dir)
 }
 
+func TestBuildRejectsInputAsOutput(t *testing.T) {
+	data := encodeCP932Lines(t, []string{"source : must remain intact"})
+
+	tests := []struct {
+		name       string
+		force      bool
+		outputPath func(t *testing.T, input string) string
+	}{
+		{
+			name: "same path without force",
+			outputPath: func(_ *testing.T, input string) string {
+				return input
+			},
+		},
+		{
+			name:  "same path with force",
+			force: true,
+			outputPath: func(_ *testing.T, input string) string {
+				return input
+			},
+		},
+		{
+			name:  "relative path",
+			force: true,
+			outputPath: func(t *testing.T, input string) string {
+				wd, err := os.Getwd()
+				if err != nil {
+					t.Fatal(err)
+				}
+				rel, err := filepath.Rel(wd, input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return rel
+			},
+		},
+		{
+			name:  "symlink",
+			force: true,
+			outputPath: func(t *testing.T, input string) string {
+				output := filepath.Join(filepath.Dir(input), "output.sqlite3")
+				if err := os.Symlink(input, output); err != nil {
+					t.Skipf("symlinks are not supported: %v", err)
+				}
+				return output
+			},
+		},
+		{
+			name:  "hard link",
+			force: true,
+			outputPath: func(t *testing.T, input string) string {
+				output := filepath.Join(filepath.Dir(input), "output.sqlite3")
+				if err := os.Link(input, output); err != nil {
+					t.Skipf("hard links are not supported: %v", err)
+				}
+				return output
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			input := writeFixture(t, dir, "Input.TXT", data)
+			output := tt.outputPath(t, input)
+
+			_, err := runBuild(t, builder.Options{
+				Type: dictionary.Eiji, Input: input, Output: output, Force: tt.force,
+			})
+			if err == nil || !strings.Contains(err.Error(), "same file") {
+				t.Fatalf("Run error = %v, want same-file error", err)
+			}
+			got, err := os.ReadFile(input)
+			if err != nil {
+				t.Fatalf("read input after rejected build: %v", err)
+			}
+			if string(got) != string(data) {
+				t.Fatal("input was modified")
+			}
+			inputInfo, err := os.Stat(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outputInfo, err := os.Stat(output)
+			if err != nil {
+				t.Fatalf("stat output after rejected build: %v", err)
+			}
+			if !os.SameFile(inputInfo, outputInfo) {
+				t.Fatal("output no longer refers to input")
+			}
+			assertNoTempFiles(t, dir)
+		})
+	}
+}
+
 func TestBuildForceReplacesOutput(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "EIJIRO1-0.TXT", encodeCP932Lines(t, []string{

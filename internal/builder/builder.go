@@ -66,10 +66,24 @@ func Run(opts Options) (Stats, error) {
 		return stats, fmt.Errorf("open input: %w", err)
 	}
 	defer in.Close()
+	inputInfo, err := in.Stat()
+	if err != nil {
+		return stats, fmt.Errorf("stat input: %w", err)
+	}
+	if same, err := samePath(opts.Input, opts.Output); err != nil {
+		return stats, err
+	} else if same {
+		return stats, errors.New("input and output refer to the same file")
+	}
 
 	// Refuse to touch an existing output unless --force was given.
-	if _, err := os.Stat(opts.Output); err == nil && !opts.Force {
-		return stats, fmt.Errorf("output %s already exists (use --force to replace)", opts.Output)
+	if outputInfo, err := os.Stat(opts.Output); err == nil {
+		if os.SameFile(inputInfo, outputInfo) {
+			return stats, errors.New("input and output refer to the same file")
+		}
+		if !opts.Force {
+			return stats, fmt.Errorf("output %s already exists (use --force to replace)", opts.Output)
+		}
 	} else if err != nil && !os.IsNotExist(err) {
 		return stats, fmt.Errorf("stat output: %w", err)
 	}
@@ -132,6 +146,21 @@ func Run(opts Options) (Stats, error) {
 
 	writeSummary(opts.Progress, stats)
 	return stats, nil
+}
+
+func samePath(a, b string) (bool, error) {
+	absA, err := filepath.Abs(a)
+	if err != nil {
+		return false, fmt.Errorf("resolve input path: %w", err)
+	}
+	absB, err := filepath.Abs(b)
+	if err != nil {
+		return false, fmt.Errorf("resolve output path: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(absA, absB), nil
+	}
+	return absA == absB, nil
 }
 
 // build performs all write operations on the temporary database.
