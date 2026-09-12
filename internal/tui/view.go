@@ -175,8 +175,7 @@ func (m *Model) renderLeftRows() []string {
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		e := m.Results[i]
-		head := stripMarker(e.Headword)
-		text := truncateToWidth(head, lw-2)
+		text := truncateToWidth(e.Headword, lw-2)
 		if i == m.Selected {
 			rows = append(rows, styleReverse+"> "+text+padSpaces(text, lw-2)+styleReset)
 		} else {
@@ -204,7 +203,7 @@ func (m *Model) renderRightRows(w int) []string {
 	}
 	e := m.Results[m.Selected]
 
-	head := truncateToWidth(stripMarker(e.Headword), w)
+	head := truncateToWidth(e.Headword, w)
 	bodyLines := wrapToWidth(e.Body, w)
 	total := len(bodyLines)
 
@@ -350,15 +349,6 @@ func (m *Model) clampDetailOffset() {
 	if m.DetailOffset > max {
 		m.DetailOffset = max
 	}
-}
-
-// stripMarker removes the leading structural marker for display.
-func stripMarker(s string) string {
-	const marker = "■"
-	if strings.HasPrefix(s, marker) {
-		return strings.TrimPrefix(s, marker)
-	}
-	return s
 }
 
 // truncateToWidth shortens s to the given display width, appending an

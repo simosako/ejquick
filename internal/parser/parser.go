@@ -1,6 +1,6 @@
-// Package parser decodes the CP932 (Windows-31J) dictionary TXT files and
-// splits each physical line into a headword and a body around the single
-// ASCII separator " : ".
+// Package parser decodes the CP932 (Windows-31J) dictionary TXT files,
+// removes the source headword marker, and splits each physical line around
+// the single ASCII separator " : ".
 package parser
 
 import (
@@ -10,9 +10,15 @@ import (
 	"strings"
 )
 
-// Separator separates headword and body in one physical line. It must occur
-// exactly once, and both sides must be non-empty, for a line to be valid.
-const Separator = " : "
+const (
+	// HeadwordMarker marks the start of a headword in the source TXT. It is
+	// source syntax and is not part of the parsed headword.
+	HeadwordMarker = "■"
+	// Separator separates headword and body in one physical line. It must
+	// occur exactly once, and both sides must be non-empty, for a line to be
+	// valid.
+	Separator = " : "
+)
 
 // Entry is a parsed dictionary entry from one valid physical line.
 type Entry struct {
@@ -54,6 +60,14 @@ func ParseLine(line string) (headword, body string, ok bool, reason string) {
 	}
 	headword = line[:first]
 	body = line[first+len(Separator):]
+	if headword == "" {
+		return "", "", false, "empty headword"
+	}
+	var found bool
+	headword, found = strings.CutPrefix(headword, HeadwordMarker)
+	if !found {
+		return "", "", false, "missing headword marker"
+	}
 	if headword == "" {
 		return "", "", false, "empty headword"
 	}

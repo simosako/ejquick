@@ -62,7 +62,7 @@ func artificialBuilderData(rows int) []byte {
 	var out strings.Builder
 	out.Grow(rows * 64)
 	for i := range rows {
-		fmt.Fprintf(&out, "entry%06d : artificial definition %06d\r\n", i, i)
+		fmt.Fprintf(&out, "\x81\xa1entry%06d : artificial definition %06d\r\n", i, i)
 	}
 	return []byte(out.String())
 }

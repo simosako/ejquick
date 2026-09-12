@@ -21,11 +21,11 @@ func TestParseLineValid(t *testing.T) {
 		head string
 		body string
 	}{
-		{"simple", "english : a language", "english", "a language"},
-		{"spaces in body", "take care : be careful", "take care", "be careful"},
-		{"head with symbols", "A/B : either", "A/B", "either"},
-		{"body with colon glued", "x : note: it", "x", "note: it"},
-		{"head with fullwidth colon", "英：語 : body", "英：語", "body"},
+		{"simple", "■english : a language", "english", "a language"},
+		{"spaces in body", "■take care : be careful", "take care", "be careful"},
+		{"head with symbols", "■A/B : either", "A/B", "either"},
+		{"body with colon glued", "■x : note: it", "x", "note: it"},
+		{"head with fullwidth colon", "■英：語 : body", "英：語", "body"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,13 +47,15 @@ func TestParseLineMalformed(t *testing.T) {
 		reason string
 	}{
 		{"empty line", "", "empty line"},
-		{"missing separator", "headword body", "missing separator"},
-		{"colon without spaces", "head:body", "missing separator"},
-		{"only left space", "head :body", "missing separator"},
-		{"only right space", "head: body", "missing separator"},
-		{"multiple separators", "a : b : c", "multiple separators"},
+		{"missing separator", "■headword body", "missing separator"},
+		{"colon without spaces", "■head:body", "missing separator"},
+		{"only left space", "■head :body", "missing separator"},
+		{"only right space", "■head: body", "missing separator"},
+		{"multiple separators", "■a : b : c", "multiple separators"},
 		{"empty headword", " : body", "empty headword"},
-		{"empty body", "head : ", "empty body"},
+		{"marker only headword", "■ : body", "empty headword"},
+		{"missing headword marker", "head : body", "missing headword marker"},
+		{"empty body", "■head : ", "empty body"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -88,18 +90,20 @@ func readAll(t *testing.T, r *parser.Reader) (entries []parser.Entry, skips []pa
 	}
 }
 
-// CP932 samples. "━" is 0x81 0xA1, "＜" is 0x81 0x97, "→" is 0x81 0xA8,
+// CP932 samples. "■" is 0x81 0xA1, "＜" is 0x81 0x97, "→" is 0x81 0xA8,
 // "ねこ" is 0x82 0xCB 0x82 0xB1, "ｶﾞ" is 0xB6 0xDE.
 func TestReaderCP932Lines(t *testing.T) {
-	// Line 1: "━! : body1"
-	// Line 2: "ねこ : cat"
+	// Line 1: "■! : body1"
+	// Line 2: "■ねこ : cat"
 	// Line 3: malformed (missing separator)
 	// Line 4: valid again to check line numbering over a skip.
 	var buf bytes.Buffer
 	buf.Write([]byte{0x81, 0xA1, '!', ' ', ':', ' ', 'b', 'o', 'd', 'y', '1', '\r', '\n'})
-	buf.Write([]byte{0x82, 0xCB, 0x82, 0xB1, ' ', ':', ' ', 'c', 'a', 't', '\n'})
+	buf.Write([]byte{0x81, 0xA1, 0x82, 0xCB, 0x82, 0xB1, ' ', ':', ' ', 'c', 'a', 't', '\n'})
+	buf.Write([]byte{0x81, 0xA1})
 	buf.WriteString("no separator line\n")
-	buf.WriteString("dog : 犬\n")
+	buf.Write([]byte{0x81, 0xA1})
+	buf.WriteString("dog : animal\n")
 
 	entries, skips, err := readAll(t, parser.NewReader(&buf))
 	if err != nil {
@@ -111,7 +115,7 @@ func TestReaderCP932Lines(t *testing.T) {
 	if len(skips) != 1 {
 		t.Fatalf("got %d skips, want 1: %+v", len(skips), skips)
 	}
-	if entries[0].LineNo != 1 || entries[0].Headword != "■!" || entries[0].Body != "body1" {
+	if entries[0].LineNo != 1 || entries[0].Headword != "!" || entries[0].Body != "body1" {
 		t.Errorf("entry 1 mismatch: %+v", entries[0])
 	}
 	if entries[1].LineNo != 2 || entries[1].Headword != "ねこ" || entries[1].Body != "cat" {
@@ -127,7 +131,7 @@ func TestReaderCP932Lines(t *testing.T) {
 
 func TestReaderEmptyLastLine(t *testing.T) {
 	// A trailing newline after the last entry must not count as a line.
-	buf := strings.NewReader("a : b\n")
+	buf := strings.NewReader("\x81\xa1a : b\n")
 	entries, skips, err := readAll(t, parser.NewReader(buf))
 	if err != nil {
 		t.Fatalf("readAll: %v", err)
@@ -138,7 +142,7 @@ func TestReaderEmptyLastLine(t *testing.T) {
 }
 
 func TestReaderEmptyLineWithinFile(t *testing.T) {
-	buf := strings.NewReader("a : b\n\nc : d\n")
+	buf := strings.NewReader("\x81\xa1a : b\n\n\x81\xa1c : d\n")
 	entries, skips, err := readAll(t, parser.NewReader(buf))
 	if err != nil {
 		t.Fatalf("readAll: %v", err)
@@ -155,7 +159,7 @@ func TestReaderEmptyLineWithinFile(t *testing.T) {
 }
 
 func TestReaderDuplicateHeadwordsKept(t *testing.T) {
-	buf := strings.NewReader("same : first\nsame : second\n")
+	buf := strings.NewReader("\x81\xa1same : first\n\x81\xa1same : second\n")
 	entries, _, err := readAll(t, parser.NewReader(buf))
 	if err != nil {
 		t.Fatalf("readAll: %v", err)
@@ -216,7 +220,7 @@ func TestDecodeCP932UnmappedPair(t *testing.T) {
 }
 
 func TestReaderStopsOnDecodeError(t *testing.T) {
-	buf := bytes.NewReader([]byte{'a', ' ', ':', ' ', 'b', '\n', 0x82, '\n', 'c', ' ', ':', ' ', 'd', '\n'})
+	buf := bytes.NewReader([]byte{0x81, 0xA1, 'a', ' ', ':', ' ', 'b', '\n', 0x82, '\n', 0x81, 0xA1, 'c', ' ', ':', ' ', 'd', '\n'})
 	entries, _, err := readAll(t, parser.NewReader(buf))
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
@@ -236,7 +240,7 @@ func TestReaderStopsOnDecodeError(t *testing.T) {
 
 func TestReaderLongLine(t *testing.T) {
 	long := strings.Repeat("x", 300*1024)
-	buf := strings.NewReader(long + " : body\n")
+	buf := strings.NewReader("\x81\xa1" + long + " : body\n")
 	entries, _, err := readAll(t, parser.NewReader(buf))
 	if err != nil {
 		t.Fatalf("readAll: %v", err)

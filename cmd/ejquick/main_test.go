@@ -136,7 +136,7 @@ func TestRunRejectsEmptyNormalizedQueryBeforeOpeningDatabase(t *testing.T) {
 	setTestAppDirs(t)
 	configPath := writeTestConfig(t, filepath.Join(t.TempDir(), "missing.sqlite3"))
 
-	for _, query := range []string{"", " \t\n", " \u25a0 "} {
+	for _, query := range []string{"", " \t\n"} {
 		t.Run(strconv.Quote(query), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := run([]string{"--config", configPath, query}, strings.NewReader("ignored"), &stdout, &stderr)
@@ -211,9 +211,9 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 
 func TestRunCLIOptionsOverrideConfigForThisProcess(t *testing.T) {
 	setTestAppDirs(t)
-	eijiPath := buildTestDatabaseWith(t, dictionary.Eiji, "Alpha : eiji body\r\n")
+	eijiPath := buildTestDatabaseWith(t, dictionary.Eiji, "\x81\xa1Alpha : eiji body\r\n")
 	waeiPath := buildTestDatabaseWith(t, dictionary.Waei,
-		"Alpha : waei exact\r\nAlphabet : waei prefix\r\n")
+		"\x81\xa1Alpha : waei exact\r\n\x81\xa1Alphabet : waei prefix\r\n")
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	configBody := fmt.Sprintf(
 		"[eiji]\ndatabase = %s\n\n[waei]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiji\"\nmax_results = 2\n",
@@ -415,7 +415,7 @@ func setTestAppDirs(t *testing.T) {
 func buildTestDatabase(t *testing.T) string {
 	t.Helper()
 	return buildTestDatabaseWith(t, dictionary.Eiji,
-		"Alpha : first body\r\n-prefix : dash body\r\n")
+		"\x81\xa1Alpha : first body\r\n\x81\xa1-prefix : dash body\r\n")
 }
 
 func buildTestDatabaseWith(t *testing.T, dt dictionary.Type, contents string) string {

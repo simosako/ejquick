@@ -49,7 +49,7 @@ func TestRunBuildWritesProgressOnlyToStderr(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "EIJIRO1-0.TXT")
 	output := filepath.Join(dir, "eiji.sqlite3")
-	if err := os.WriteFile(input, []byte("alpha : first body\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,7 @@ func TestRunBuildFailureReturnsTwo(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "input.TXT")
 	output := filepath.Join(dir, "eiji.sqlite3")
-	if err := os.WriteFile(input, []byte("alpha : first body\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(output, []byte("existing"), 0o644); err != nil {

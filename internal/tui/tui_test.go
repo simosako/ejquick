@@ -17,16 +17,15 @@ import (
 	"github.com/simosako/ejquick/internal/search"
 )
 
-const fixtureDict = `care : attention
-careful : cautious
-take care : be careful
-scare : frighten
-daycare : childcare
-caress : touch gently
-organic : natural
-card : rectangular
-scar : mark
-`
+const fixtureDict = "\x81\xa1care : attention\r\n" +
+	"\x81\xa1careful : cautious\r\n" +
+	"\x81\xa1take care : be careful\r\n" +
+	"\x81\xa1scare : frighten\r\n" +
+	"\x81\xa1daycare : childcare\r\n" +
+	"\x81\xa1caress : touch gently\r\n" +
+	"\x81\xa1organic : natural\r\n" +
+	"\x81\xa1card : rectangular\r\n" +
+	"\x81\xa1scar : mark\r\n"
 
 // newTestModel builds a real fixture database and returns a model wired
 // to its search service.

@@ -23,7 +23,7 @@ func buildFixtureDB(t *testing.T, dt dictionary.Type, lines []string) string {
 	input := filepath.Join(dir, "in.TXT")
 	body := ""
 	for _, l := range lines {
-		body += l + "\r\n"
+		body += "\x81\xa1" + l + "\r\n"
 	}
 	if err := os.WriteFile(input, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func TestSearchEmptyQuery(t *testing.T) {
 	}
 }
 
-func TestSearchCaseFoldingAndMarker(t *testing.T) {
+func TestSearchCaseFolding(t *testing.T) {
 	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
 	svc := newService(t, db, 50)
 
@@ -241,14 +241,36 @@ func TestSearchCaseFoldingAndMarker(t *testing.T) {
 		t.Errorf("case folding mismatch: %v vs %v", headwords(lower), headwords(upper))
 	}
 
-	// A query carrying the structural marker still matches because
-	// normalization strips it.
+	// The source marker is not application query syntax.
 	marked, err := svc.Search(context.Background(), "■care")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(marked) == 0 {
-		t.Error("marker-prefixed query returned nothing")
+	if len(marked) != 0 {
+		t.Errorf("marker-prefixed query returned %v, want no results", headwords(marked))
+	}
+}
+
+func TestOpenRepositoryRejectsOldNormalizationVersion(t *testing.T) {
+	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE metadata SET value = '1' WHERE key = 'normalization_version'"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	if repo != nil {
+		repo.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "normalization_version") || !strings.Contains(err.Error(), "rebuild") {
+		t.Fatalf("OpenRepository error = %v, want normalization rebuild error", err)
 	}
 }
 

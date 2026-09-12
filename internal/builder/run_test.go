@@ -23,7 +23,7 @@ func TestInsertEntriesReportsProgressInterval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input := strings.NewReader(strings.Repeat("entry : artificial body\r\n", progressEvery+1))
+	input := strings.NewReader(strings.Repeat("\x81\xa1entry : artificial body\r\n", progressEvery+1))
 	var progress bytes.Buffer
 	var stats Stats
 	if err := insertEntries(db, input, Options{Type: dictionary.Eiji, Progress: &progress}, &stats); err != nil {
@@ -41,7 +41,7 @@ func TestRunPublishFailurePreservesExistingOutput(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "EIJIRO1-0.TXT")
 	output := filepath.Join(dir, "eiji.sqlite3")
-	if err := os.WriteFile(input, []byte("alpha : artificial body\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(input, []byte("\x81\xa1alpha : artificial body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(output, []byte("existing database"), 0o644); err != nil {

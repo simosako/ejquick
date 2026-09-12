@@ -89,7 +89,7 @@ func buildArtificialBenchmarkDB(b *testing.B, rows int) string {
 		default:
 			headword = fmt.Sprintf("word%06dterm", i)
 		}
-		if _, err := fmt.Fprintf(f, "%s : artificial definition %06d\r\n", headword, i); err != nil {
+		if _, err := fmt.Fprintf(f, "\x81\xa1%s : artificial definition %06d\r\n", headword, i); err != nil {
 			f.Close()
 			b.Fatal(err)
 		}

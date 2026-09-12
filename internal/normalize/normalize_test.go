@@ -29,10 +29,9 @@ func TestNormalizeEiji(t *testing.T) {
 		{"digits kept", "mp3", "mp3"},
 		{"empty string", "", ""},
 		{"only spaces", "   ", ""},
-		{"leading structural marker stripped", "■english", "english"},
-		{"marker followed by space", "■ english ", "english"},
+		{"source marker is ordinary query text", "■English", "■english"},
 		{"inner marker kept", "a■b", "a■b"},
-		{"marker only", "■", ""},
+		{"marker only", "■", "■"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,7 +62,7 @@ func TestNormalizeWaei(t *testing.T) {
 		{"ascii upper folds", "HELLO", "hello"},
 		{"kanji digit is not converted", "一", "一"},
 		{"long vowel mark kept", "ー", "ー"},
-		{"leading structural marker stripped", "■ねこ", "ねこ"},
+		{"source marker is ordinary query text", "■ねこ", "■ねこ"},
 		{"empty", "", ""},
 	}
 	for _, tt := range tests {

@@ -20,7 +20,7 @@ func encodeCP932Lines(t *testing.T, lines []string) []byte {
 	t.Helper()
 	var b strings.Builder
 	for _, l := range lines {
-		enc, err := encodeCP932(l)
+		enc, err := encodeCP932("■" + l)
 		if err != nil {
 			t.Fatalf("encode %q: %v", l, err)
 		}
@@ -87,6 +87,13 @@ func TestBuildBasicDatabase(t *testing.T) {
 	if head != "english" || norm != "english" || body != "the English language" {
 		t.Errorf("entry 1 mismatch: %q %q %q", head, norm, body)
 	}
+	var marked int64
+	if err := db.QueryRow("SELECT count(*) FROM entries WHERE substr(headword, 1, 1) = '■'").Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
+	if marked != 0 {
+		t.Errorf("stored headwords with source marker = %d, want 0", marked)
+	}
 
 	// Normalization is applied: "English breakfast" folds to lower case.
 	err = db.QueryRow("SELECT headword_norm FROM entries WHERE id = 2").Scan(&norm)
@@ -116,7 +123,7 @@ func TestBuildBasicDatabase(t *testing.T) {
 		"entry_count":           "4",
 		"skipped_entry_count":   "0",
 		"encoding":              "CP932",
-		"normalization_version": "1",
+		"normalization_version": "2",
 		"fts_version":           "1",
 		"compacted":             "false",
 	})
@@ -394,7 +401,7 @@ func TestBuildFailurePreservesExistingOutput(t *testing.T) {
 		name string
 		data []byte
 	}{
-		{name: "build failure", data: append([]byte("ok : fine\r\n"), 0x80, '\n')},
+		{name: "build failure", data: append([]byte("\x81\xa1ok : fine\r\n"), 0x80, '\n')},
 		{name: "validation failure", data: nil},
 	}
 	for _, tt := range tests {
@@ -505,7 +512,7 @@ func TestBuildCompactSetsMetadata(t *testing.T) {
 func TestBuildDecodeErrorStops(t *testing.T) {
 	dir := t.TempDir()
 	// Valid line followed by an invalid CP932 lead byte 0x80.
-	data := append([]byte("ok : fine\r\n"), 0x80, '\n')
+	data := append([]byte("\x81\xa1ok : fine\r\n"), 0x80, '\n')
 	input := writeFixture(t, dir, "EIJIRO1-0.TXT", data)
 	output := filepath.Join(dir, "eiji.sqlite3")
 
@@ -623,6 +630,7 @@ func encodeCP932(s string) ([]byte, error) {
 
 // cp932TestEncode maps the few non-ASCII runes used by the fixtures.
 var cp932TestEncode = map[rune][]byte{
+	'■': {0x81, 0xA1},
 	'ね': {0x82, 0xCB},
 	'こ': {0x82, 0xB1},
 	'い': {0x82, 0xA2},
