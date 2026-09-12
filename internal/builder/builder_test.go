@@ -1,12 +1,14 @@
 package builder_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/simosako/ejquick/internal/builder"
 	"github.com/simosako/ejquick/internal/dictionary"
@@ -174,8 +176,13 @@ func TestBuildSkipsKeepIDGaps(t *testing.T) {
 	defer rows.Close()
 	for rows.Next() {
 		var id int64
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
 		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	if len(ids) != 2 || ids[0] != 1 || ids[1] != 4 {
 		t.Errorf("ids = %v, want [1 4]", ids)
@@ -321,6 +328,7 @@ func TestBuildForceReplacesOutput(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "EIJIRO1-0.TXT", encodeCP932Lines(t, []string{
 		"one : 1",
+		"removed : old only",
 		"two : 2",
 	}))
 	output := filepath.Join(dir, "eiji.sqlite3")
@@ -331,10 +339,11 @@ func TestBuildForceReplacesOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Rebuild from modified input with --force.
+	// Rebuild from modified input with --force. The old-only entry must not
+	// survive, and IDs must follow the new physical line positions.
 	input2 := writeFixture(t, dir, "EIJIRO1-0.TXT", encodeCP932Lines(t, []string{
+		"inserted : new first line",
 		"one : first",
-		"removed : x",
 		"two : second",
 	}))
 	stats, err := runBuild(t, builder.Options{
@@ -349,14 +358,123 @@ func TestBuildForceReplacesOutput(t *testing.T) {
 
 	db := openRO(t, output)
 	defer db.Close()
-	var cnt int64
-	if err := db.QueryRow("SELECT count(*) FROM entries WHERE headword_norm = 'removed'").Scan(&cnt); err != nil {
+	var removed int64
+	if err := db.QueryRow("SELECT count(*) FROM entries WHERE headword_norm = 'removed'").Scan(&removed); err != nil {
 		t.Fatal(err)
 	}
-	if cnt != 1 {
-		t.Errorf("removed-entry present after rebuild = %d", cnt)
+	if removed != 0 {
+		t.Errorf("old-only entries after rebuild = %d, want 0", removed)
+	}
+	rows, err := db.Query("SELECT id, headword FROM entries ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var id int64
+		var headword string
+		if err := rows.Scan(&id, &headword); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, fmt.Sprintf("%d:%s", id, headword))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1:inserted", "2:one", "3:two"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("entries = %v, want %v", got, want)
 	}
 	assertNoTempFiles(t, dir)
+}
+
+func TestBuildFailurePreservesExistingOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{name: "build failure", data: append([]byte("ok : fine\r\n"), 0x80, '\n')},
+		{name: "validation failure", data: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			input := writeFixture(t, dir, "EIJIRO1-0.TXT", tt.data)
+			output := writeFixture(t, dir, "eiji.sqlite3", []byte("existing database"))
+			var progress bytes.Buffer
+
+			if _, err := builder.Run(builder.Options{
+				Type: dictionary.Eiji, Input: input, Output: output, Force: true, Progress: &progress,
+			}); err == nil {
+				t.Fatal("build unexpectedly succeeded")
+			}
+			got, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != "existing database" {
+				t.Errorf("existing output was changed to %q", got)
+			}
+			if !strings.Contains(progress.String(), ": failed:") {
+				t.Errorf("progress has no failed phase: %q", progress.String())
+			}
+			assertNoTempFiles(t, dir)
+		})
+	}
+}
+
+func TestBuildProgressHasFixedLines(t *testing.T) {
+	dir := t.TempDir()
+	input := writeFixture(t, dir, "EIJIRO1-0.TXT", encodeCP932Lines(t, []string{
+		"alpha : first letter",
+	}))
+	var progress bytes.Buffer
+	if _, err := builder.Run(builder.Options{
+		Type: dictionary.Eiji, Input: input, Output: filepath.Join(dir, "eiji.sqlite3"), Progress: &progress,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(progress.String(), "\r\x1b") {
+		t.Fatalf("progress contains terminal control characters: %q", progress.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(progress.String(), "\n"), "\n")
+	wantFixed := []string{
+		"Reading: start",
+		"Reading: done lines=1 entries=1 skipped=0",
+		"B-tree index: start",
+		"B-tree index: done",
+		"FTS build: start",
+		"FTS build: done",
+		"ANALYZE: start",
+		"ANALYZE: done",
+		"Validation: start",
+		"Validation: done",
+		"Source lines: 1",
+		"Entries: 1",
+		"Skipped: 0",
+	}
+	if len(lines) != len(wantFixed)+3 {
+		t.Fatalf("progress lines = %d, want %d: %q", len(lines), len(wantFixed)+3, progress.String())
+	}
+	for i, want := range wantFixed {
+		if lines[i] != want {
+			t.Errorf("progress line %d = %q, want %q", i+1, lines[i], want)
+		}
+	}
+	if !strings.HasPrefix(lines[13], "Database: ") {
+		t.Errorf("database summary = %q", lines[13])
+	}
+	if lines[14] != "Compacted: no" {
+		t.Errorf("compact summary = %q", lines[14])
+	}
+	elapsed := strings.TrimPrefix(lines[15], "Elapsed: ")
+	if _, err := time.ParseDuration(elapsed); err != nil {
+		t.Errorf("elapsed summary = %q: %v", lines[15], err)
+	}
+	if strings.Contains(progress.String(), "VACUUM:") {
+		t.Errorf("normal build reported VACUUM: %q", progress.String())
+	}
 }
 
 func TestBuildCompactSetsMetadata(t *testing.T) {
@@ -368,10 +486,16 @@ func TestBuildCompactSetsMetadata(t *testing.T) {
 	}))
 	output := filepath.Join(dir, "eiji.sqlite3")
 
+	var progress bytes.Buffer
 	if _, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Compact: true, Progress: testWriter{t},
+		Type: dictionary.Eiji, Input: input, Output: output, Compact: true, Progress: &progress,
 	}); err != nil {
 		t.Fatal(err)
+	}
+	for _, line := range []string{"VACUUM: start\n", "VACUUM: done\n", "ANALYZE: start\n", "Validation: done\n"} {
+		if strings.Count(progress.String(), line) != 1 {
+			t.Errorf("progress occurrence of %q is not one: %q", line, progress.String())
+		}
 	}
 	db := openRO(t, output)
 	defer db.Close()
@@ -440,10 +564,13 @@ func checkMeta(t *testing.T, db *sql.DB, want map[string]string) {
 	got := map[string]string{}
 	for rows.Next() {
 		var k, v string
-		if rows.Scan(&k, &v); err != nil {
+		if err := rows.Scan(&k, &v); err != nil {
 			t.Fatal(err)
 		}
 		got[k] = v
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	for k, w := range want {
 		if got[k] != w {

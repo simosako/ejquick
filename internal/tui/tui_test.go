@@ -94,7 +94,8 @@ func key(s string) tea.KeyPressMsg {
 	codes := map[string]rune{
 		"down": tea.KeyDown, "up": tea.KeyUp,
 		"pgdown": tea.KeyPgDown, "pgup": tea.KeyPgUp,
-		"tab":  tea.KeyTab,
+		"tab":   tea.KeyTab,
+		"enter": tea.KeyEnter, "esc": tea.KeyEsc,
 		"left": tea.KeyLeft, "right": tea.KeyRight,
 		"backspace": tea.KeyBackspace, "delete": tea.KeyDelete,
 		"home": tea.KeyHome, "end": tea.KeyEnd,
@@ -450,6 +451,68 @@ func TestTabWithSingleDictionary(t *testing.T) {
 	}
 }
 
+func TestTabSwitchesBetweenAvailableDictionariesAndClearsSearchState(t *testing.T) {
+	m := New(dictionary.Eiji, map[dictionary.Type]*search.Service{
+		dictionary.Eiji: nil,
+		dictionary.Waei: nil,
+	}, nil, nil)
+	m.Query = "care"
+	m.QueryCursor = 4
+	m.Results = []search.Entry{{ID: 7, Headword: "care", Body: "attention"}}
+	m.Selected = 0
+	m.selectedID = 7
+	m.ListOffset = 2
+	m.DetailOffset = 3
+	m.SearchError = "old error"
+	m.StatusWarning = "old warning"
+	m.RequestID = 5
+	canceled := false
+	m.CancelSearch = func() { canceled = true }
+
+	next, cmd := m.Update(key("tab"))
+	m = modelOf(t, next)
+	if cmd != nil {
+		t.Fatal("Tab started a database search")
+	}
+	if !canceled || m.CancelSearch != nil {
+		t.Error("Tab did not cancel the in-flight search")
+	}
+	if m.Dictionary != dictionary.Waei || m.RequestID != 6 {
+		t.Errorf("dictionary = %s request = %d, want waei request 6", m.Dictionary, m.RequestID)
+	}
+	if m.Query != "" || m.QueryCursor != 0 || len(m.Results) != 0 || m.Selected != -1 {
+		t.Errorf("search state not cleared: query=%q cursor=%d results=%v selected=%d",
+			m.Query, m.QueryCursor, m.Results, m.Selected)
+	}
+	if m.ListOffset != 0 || m.DetailOffset != 0 || m.SearchError != "" || m.StatusWarning != "" {
+		t.Errorf("derived state not cleared: list=%d detail=%d error=%q warning=%q",
+			m.ListOffset, m.DetailOffset, m.SearchError, m.StatusWarning)
+	}
+	if got := m.renderStatus(); got != dictionary.Waei.Label() {
+		t.Errorf("status = %q, want %q", got, dictionary.Waei.Label())
+	}
+}
+
+func TestEnterAndEscapeAreNoOps(t *testing.T) {
+	for _, keyName := range []string{"enter", "esc"} {
+		t.Run(keyName, func(t *testing.T) {
+			m := New(dictionary.Eiji, nil, nil, nil)
+			m.Query = "query"
+			m.QueryCursor = 2
+			m.RequestID = 4
+			next, cmd := m.Update(key(keyName))
+			m = modelOf(t, next)
+			if cmd != nil {
+				t.Fatalf("%s returned a command", keyName)
+			}
+			if m.Query != "query" || m.QueryCursor != 2 || m.RequestID != 4 {
+				t.Errorf("%s changed model: query=%q cursor=%d request=%d",
+					keyName, m.Query, m.QueryCursor, m.RequestID)
+			}
+		})
+	}
+}
+
 func TestGuideHidesTabWithOneDictionary(t *testing.T) {
 	m := newTestModel(t)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
@@ -478,11 +541,34 @@ func TestViewContainsPanesAndStatus(t *testing.T) {
 	}
 }
 
+func TestRenderLeftRowsTruncatesWideHeadwordByDisplayWidth(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Width = 80
+	m.Height = 10
+	m.Results = []search.Entry{{ID: 1, Headword: strings.Repeat("界", 20), Body: "artificial"}}
+	m.Selected = 0
+	rows := m.renderLeftRows()
+	if len(rows) != 1 {
+		t.Fatalf("left rows = %d, want 1", len(rows))
+	}
+	plain := stripANSI(rows[0])
+	if width := uniseg.StringWidth(plain); width != m.leftWidth() {
+		t.Errorf("selected row width = %d, want pane width %d", width, m.leftWidth())
+	}
+	if !strings.Contains(plain, "…") {
+		t.Errorf("wide headword was not truncated with an ellipsis: %q", plain)
+	}
+}
+
 func TestNarrowTerminalWarning(t *testing.T) {
 	m := newTestModel(t)
 	typeQuery(t, m, "care")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
+	requestID := m.RequestID
+	next, cmd := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
 	m = modelOf(t, next)
+	if cmd != nil || m.RequestID != requestID {
+		t.Errorf("narrow resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+	}
 	v := m.View().Content
 	if !strings.Contains(v, "too narrow") {
 		t.Errorf("narrow view missing warning: %q", v)
@@ -490,8 +576,11 @@ func TestNarrowTerminalWarning(t *testing.T) {
 	if m.Query != "care" {
 		t.Error("query lost during narrow mode")
 	}
-	next, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	next, cmd = m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
 	m = modelOf(t, next)
+	if cmd != nil || m.RequestID != requestID {
+		t.Errorf("wide resize started a search: cmd=%v request=%d, want %d", cmd != nil, m.RequestID, requestID)
+	}
 	if v := m.View().Content; !strings.Contains(v, "care") {
 		t.Errorf("results not restored after widening: %q", v)
 	}

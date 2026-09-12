@@ -51,6 +51,10 @@ type Stats struct {
 // Run executes the whole conversion: build into a temporary database in
 // the output directory, validate it read-only, then atomically publish it.
 func Run(opts Options) (Stats, error) {
+	return run(opts, publish)
+}
+
+func run(opts Options, publishDB func(string, string) error) (Stats, error) {
 	start := time.Now()
 	var stats Stats
 	if opts.Progress == nil {
@@ -134,7 +138,7 @@ func Run(opts Options) (Stats, error) {
 	}
 
 	// Publish: sync the file, then atomically rename over the output.
-	if err := publish(tmpPath, opts.Output); err != nil {
+	if err := publishDB(tmpPath, opts.Output); err != nil {
 		os.Remove(tmpPath)
 		return stats, fmt.Errorf("publish: %w", err)
 	}
@@ -218,9 +222,14 @@ func build(db *sql.DB, in io.Reader, opts Options, stats *Stats) error {
 // insertEntries streams the source file into the entries table inside a
 // single transaction, printing progress every progressEvery physical
 // lines and at the end of input.
-func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) error {
+func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr error) {
 	prog := opts.Progress
 	fmt.Fprintln(prog, "Reading: start")
+	defer func() {
+		if retErr != nil {
+			fmt.Fprintf(prog, "Reading: failed: %v\n", retErr)
+		}
+	}()
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -265,12 +274,11 @@ func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) error {
 				stats.SourceLines, stats.Entries, stats.Skipped)
 		}
 	}
-	fmt.Fprintf(prog, "Reading: done lines=%d entries=%d skipped=%d\n",
-		stats.SourceLines, stats.Entries, stats.Skipped)
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert transaction: %w", err)
 	}
+	fmt.Fprintf(prog, "Reading: done lines=%d entries=%d skipped=%d\n",
+		stats.SourceLines, stats.Entries, stats.Skipped)
 	return nil
 }
 
@@ -328,8 +336,13 @@ func writeMetadata(db *sql.DB, opts Options, stats *Stats) error {
 
 // validate reopens the finished database read-only and checks schema,
 // metadata, counts, and that both search paths return results.
-func validate(path string, opts Options, stats Stats) error {
+func validate(path string, opts Options, stats Stats) (retErr error) {
 	phaseStart(opts.Progress, "Validation")
+	defer func() {
+		if retErr != nil {
+			fmt.Fprintf(opts.Progress, "Validation: failed: %v\n", retErr)
+		}
+	}()
 
 	db, err := sqlite.OpenReadOnly(path)
 	if err != nil {

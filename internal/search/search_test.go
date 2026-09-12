@@ -88,25 +88,34 @@ func TestSearchExactComesFirstThenShorter(t *testing.T) {
 	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
 	svc := newService(t, db, 50)
 
-	// "care" exact match must be first.
 	entries, err := svc.Search(context.Background(), "care")
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
-	if len(entries) == 0 {
-		t.Fatal("no results")
+	got := make([]string, len(entries))
+	for i, entry := range entries {
+		got[i] = fmt.Sprintf("%d:%s", entry.ID, entry.Headword)
 	}
-	if entries[0].Headword != "care" {
-		t.Errorf("first = %q, want exact %q", entries[0].Headword, "care")
+	want := []string{
+		"1:care",
+		"12:career",
+		"11:caress",
+		"3:careful",
+		"6:careless",
+		"17:carefully",
+		"10:caretaker",
+		"9:care package",
+		"5:scare",
+		"16:scared",
+		"7:daycare",
+		"18:aftercare",
+		"2:take care",
+		"19:undercare",
+		"4:take care of",
+		"8:medical care",
 	}
-	// Prefix results sorted by rune length.
-	for i := 1; i+1 < len(entries); i++ {
-		a, b := entries[i], entries[i+1]
-		// Substring entries begin once prefix matches are exhausted;
-		// only verify ordering within the same match kind by checking
-		// the norm starts with the query.
-		_ = a
-		_ = b
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("ordered results = %v, want %v", got, want)
 	}
 }
 

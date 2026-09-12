@@ -86,6 +86,7 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 		{"--limit", "0", "query"},
 		{"--limit", "501", "query"},
 		{"--format", "xml", "query"},
+		{"--stdin"},
 	}
 	for _, args := range tests {
 		var stdout, stderr bytes.Buffer
@@ -98,6 +99,23 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 		if !strings.Contains(stderr.String(), "Usage: ejquick") {
 			t.Errorf("run(%v) stderr = %q", args, stderr.String())
 		}
+	}
+}
+
+func TestPipedStdinDoesNotSelectCLI(t *testing.T) {
+	setTestAppDirs(t)
+	configPath := writeTestConfig(t, filepath.Join(t.TempDir(), "missing.sqlite3"))
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--config", configPath}, strings.NewReader("alpha\nsecond query\n"), &stdout, &stderr)
+
+	if code != 2 {
+		t.Errorf("exit code = %d, want TUI startup error 2", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "no usable dictionary database") {
+		t.Errorf("stderr = %q, want TUI startup error", stderr.String())
 	}
 }
 
@@ -166,6 +184,12 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 			args:     []string{"--config", configPath, "missing"},
 			wantCode: 1,
 		},
+		{
+			name:       "dash-prefixed query after separator",
+			args:       []string{"--config", configPath, "--", "-prefix"},
+			wantCode:   0,
+			wantOutput: "-prefix\ndash body\n\n",
+		},
 	}
 
 	for _, tt := range tests {
@@ -182,6 +206,37 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 				t.Errorf("stderr = %q, want empty", stderr.String())
 			}
 		})
+	}
+}
+
+func TestRunCLIOptionsOverrideConfigForThisProcess(t *testing.T) {
+	setTestAppDirs(t)
+	eijiPath := buildTestDatabaseWith(t, dictionary.Eiji, "Alpha : eiji body\r\n")
+	waeiPath := buildTestDatabaseWith(t, dictionary.Waei,
+		"Alpha : waei exact\r\nAlphabet : waei prefix\r\n")
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	configBody := fmt.Sprintf(
+		"[eiji]\ndatabase = %s\n\n[waei]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiji\"\nmax_results = 2\n",
+		strconv.Quote(eijiPath), strconv.Quote(waeiPath))
+	if err := os.WriteFile(configPath, []byte(configBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--config", configPath,
+		"--dictionary", "waei",
+		"--limit", "1",
+		"alpha",
+	}, panicReader{}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.String() != "Alpha\nwaei exact\n\n" {
+		t.Errorf("stdout = %q, want waei exact result only", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
 	}
 }
 
@@ -246,6 +301,41 @@ func TestCLIQueryDoesNotReadProcessStdin(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestCommandProcessExitCodes(t *testing.T) {
+	setTestAppDirs(t)
+	dbPath := buildTestDatabase(t)
+	configPath := writeTestConfig(t, dbPath)
+	tests := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{name: "results", args: []string{"--config", configPath, "alpha"}, want: 0},
+		{name: "no results", args: []string{"--config", configPath, "missing"}, want: 1},
+		{name: "usage error", args: []string{"--unknown"}, want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := append([]string{"-test.run=^TestCommandHelper$", "--"}, tt.args...)
+			cmd := exec.Command(os.Args[0], args...)
+			cmd.Env = append(os.Environ(), "EJQUICK_COMMAND_HELPER=1")
+			err := cmd.Run()
+			got := 0
+			if err != nil {
+				exitErr, ok := err.(*exec.ExitError)
+				if !ok {
+					t.Fatalf("run subprocess: %v", err)
+				}
+				got = exitErr.ExitCode()
+			}
+			if got != tt.want {
+				t.Errorf("exit code = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -324,14 +414,20 @@ func setTestAppDirs(t *testing.T) {
 
 func buildTestDatabase(t *testing.T) string {
 	t.Helper()
+	return buildTestDatabaseWith(t, dictionary.Eiji,
+		"Alpha : first body\r\n-prefix : dash body\r\n")
+}
+
+func buildTestDatabaseWith(t *testing.T, dt dictionary.Type, contents string) string {
+	t.Helper()
 	dir := t.TempDir()
-	input := filepath.Join(dir, "EIJIRO1-0.TXT")
-	if err := os.WriteFile(input, []byte("Alpha : first body\r\n-prefix : dash body\r\n"), 0o644); err != nil {
+	input := filepath.Join(dir, strings.ToUpper(dt.String())+"1-0.TXT")
+	if err := os.WriteFile(input, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, dt.String()+".sqlite3")
 	if _, err := builder.Run(builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: io.Discard,
+		Type: dt, Input: input, Output: output, Progress: io.Discard,
 	}); err != nil {
 		t.Fatalf("build test database: %v", err)
 	}

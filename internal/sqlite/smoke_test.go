@@ -192,26 +192,38 @@ func TestSmokeQueryContextCancel(t *testing.T) {
 	}
 	defer db.Close()
 
-	if _, err := db.Exec("CREATE TABLE t(v)"); err != nil {
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("get connection: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(context.Background(), "CREATE TABLE t(v TEXT)"); err != nil {
 		t.Fatalf("create table: %v", err)
+	}
+	if _, err := conn.ExecContext(context.Background(), "INSERT INTO t VALUES ('still usable')"); err != nil {
+		t.Fatalf("insert sentinel: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Cancel while the query is running: use a slow recursive CTE.
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
+	timer := time.AfterFunc(50*time.Millisecond, cancel)
+	defer timer.Stop()
 	start := time.Now()
-	_, err = db.QueryContext(ctx,
+	rows, err := conn.QueryContext(ctx,
 		`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c`)
+	if err == nil {
+		for rows.Next() {
+		}
+		err = rows.Err()
+		rows.Close()
+	}
 	elapsed := time.Since(start)
 	if err == nil {
 		cancel()
 		t.Fatalf("query unexpectedly succeeded without cancellation")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Logf("query error type: %v (want context.Canceled)", err)
+		t.Fatalf("query error = %v, want context.Canceled", err)
 	}
 	// The query must return quickly instead of counting billions of rows.
 	if elapsed > 5*time.Second {
@@ -219,9 +231,13 @@ func TestSmokeQueryContextCancel(t *testing.T) {
 	}
 	cancel()
 
-	// Verify the connection is still usable afterwards.
-	if err := db.Ping(); err != nil {
-		t.Fatalf("ping after cancel: %v", err)
+	// Verify the same connection can still query its existing table.
+	var got string
+	if err := conn.QueryRowContext(context.Background(), "SELECT v FROM t").Scan(&got); err != nil {
+		t.Fatalf("query existing table after cancel: %v", err)
+	}
+	if got != "still usable" {
+		t.Errorf("sentinel after cancel = %q", got)
 	}
 }
 
