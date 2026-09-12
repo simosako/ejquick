@@ -118,6 +118,23 @@ Run with `--debug` to also log every search (dictionary, request ID,
 query, result count, elapsed time). The builder writes its fixed-line
 progress to stderr only and does not use the log file.
 
+## Development
+
+Run the standard checks and artificial-data benchmarks with:
+
+```bash
+make test
+make test-race
+make vet
+make tidy-check
+make bench
+```
+
+See [`bench/README.md`](bench/README.md) for reproducible real-data
+measurements. The helper only reads the purchased TXT path supplied to it;
+all generated SQLite databases and reports stay under the ignored `tmp/`
+directory and are never added to the repository.
+
 ## License
 
 MIT. See [LICENSE](LICENSE). Third-party notices:

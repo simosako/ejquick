@@ -15,7 +15,7 @@ TARGETS := \
 	darwin/arm64
 
 # Scratch binaries always go to tmp/ (never committed, see AGENTS.md).
-.PHONY: build test vet fmt clean release
+.PHONY: build test test-race vet fmt fmt-check tidy-check bench bench-smoke clean release
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick ./cmd/ejquick
@@ -24,11 +24,27 @@ build:
 test:
 	go test ./...
 
+test-race:
+	go test -race ./...
+
 vet:
 	go vet ./...
 
 fmt:
-	gofmt -w cmd internal
+	gofmt -w bench cmd internal tools
+
+fmt-check:
+	@files="$$(gofmt -l bench cmd internal tools)"; \
+		test -z "$$files" || { echo "gofmt required for:"; echo "$$files"; exit 1; }
+
+tidy-check:
+	go mod tidy -diff
+
+bench:
+	go test -run '^$$' -bench . -benchmem ./internal/builder ./internal/search
+
+bench-smoke:
+	go test -run '^$$' -bench . -benchmem -benchtime=1x ./internal/builder ./internal/search
 
 clean:
 	rm -rf dist tmp/ejquick tmp/ejquick-build

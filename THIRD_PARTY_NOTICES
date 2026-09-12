@@ -15,9 +15,6 @@ text is reproduced at the end of this file.
   charm.land/bubbletea/v2 v2.0.9
     Copyright (c) 2020-2025 Charm, Inc.
 
-  charm.land/lipgloss/v2 v2.0.6
-    Copyright (c) 2021 Charm, Inc.
-
   github.com/charmbracelet/colorprofile v0.4.3
     Copyright (c) 2024 Charm, Inc.
 
@@ -33,6 +30,9 @@ text is reproduced at the end of this file.
   github.com/charmbracelet/x/termios v0.1.1
     Copyright (c) 2024 Charm, Inc.
 
+  github.com/charmbracelet/x/windows v0.2.2
+    Copyright (c) 2024 Charm, Inc.
+
   github.com/clipperhouse/displaywidth v0.11.0
     Copyright (c) 2025 C & P Consultants Ltd
 
@@ -46,11 +46,17 @@ text is reproduced at the end of this file.
     Copyright (c) 2013 Lucas Beyer
     (Contains code from the Go project under the BSD-3-Clause license.)
 
+  github.com/mattn/go-isatty v0.0.24
+    Copyright (c) Yasuhiro Matsumoto <mattn.jp@gmail.com>
+
   github.com/mattn/go-runewidth v0.0.24
     Copyright (c) 2016 Yasuhiro Matsumoto
 
   github.com/muesli/cancelreader v0.2.2
     Copyright (c) 2022 Christian Muehlhaeuser
+
+  github.com/ncruces/go-strftime v1.0.0
+    Copyright (c) 2022 Nuno Cruces
 
   github.com/pelletier/go-toml/v2 v2.4.3
     Copyright (c) 2013 - 2024 Thomas Pelletier, Eric Cornely, and others
