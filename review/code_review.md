@@ -6,6 +6,10 @@
 
 対象: Git 管理されている Go ソース、テスト、`README.md`、`Makefile`、依存関係・ライセンス文書
 
+## 状況
+
+2026/09/12 : 以下の指摘事項は全て対応済 (commit 6621a0ca)
+
 ## 総評
 
 全体のアーキテクチャは設計書によく沿っている。Builder と検索アプリは別バイナリで、TUI/CLI は同じ Search Service と read-only Repository を共有し、正規化も Builder と検索側で共用されている。B-tree prefix 検索、FTS5 trigram substring 検索、候補数制限、非同期検索の request ID と context cancellation、事前生成 DB という主要方針も実装されている。
