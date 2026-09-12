@@ -295,6 +295,55 @@ func TestTextInputMaintainsGraphemeCursor(t *testing.T) {
 	}
 }
 
+func TestBracketedPasteUsesGraphemeSafeInsertion(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Query = "eafter"
+	m.QueryCursor = 1
+
+	next, cmd := m.Update(tea.PasteMsg{Content: "\u0301日本"})
+	m = modelOf(t, next)
+	if cmd == nil {
+		t.Fatal("non-empty paste did not start a search")
+	}
+	if m.Query != "e\u0301日本after" || m.QueryCursor != 3 {
+		t.Fatalf("query = %q cursor = %d, want %q cursor 3",
+			m.Query, m.QueryCursor, "e\u0301日本after")
+	}
+
+	m = press(t, m, "backspace")
+	if m.Query != "e\u0301日after" || m.QueryCursor != 2 {
+		t.Errorf("after backspace query = %q cursor = %d", m.Query, m.QueryCursor)
+	}
+}
+
+func TestBracketedPasteCollapsesLineEndingsToSpaces(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Query = "beforeafter"
+	m.QueryCursor = 6
+
+	next, _ := m.Update(tea.PasteMsg{Content: "one\r\ntwo\n\nthree\rfour"})
+	m = modelOf(t, next)
+	want := "beforeone two three fourafter"
+	if m.Query != want || m.QueryCursor != 24 {
+		t.Errorf("query = %q cursor = %d, want %q cursor 24",
+			m.Query, m.QueryCursor, want)
+	}
+}
+
+func TestEmptyBracketedPasteIsNoOp(t *testing.T) {
+	m := New(dictionary.Eiji, nil, nil, nil)
+	m.Query = "query"
+	m.QueryCursor = 2
+	m.RequestID = 4
+
+	next, cmd := m.Update(tea.PasteMsg{})
+	m = modelOf(t, next)
+	if cmd != nil || m.Query != "query" || m.QueryCursor != 2 || m.RequestID != 4 {
+		t.Errorf("empty paste changed model: query=%q cursor=%d request=%d cmd=%v",
+			m.Query, m.QueryCursor, m.RequestID, cmd)
+	}
+}
+
 func TestDeleteWordBefore(t *testing.T) {
 	tests := []struct {
 		name       string

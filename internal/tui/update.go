@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -44,6 +45,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SearchError = ""
 		m.applyResults(msg.entries)
 		return m, nil
+
+	case tea.PasteMsg:
+		return m.insertQueryText(normalizePastedText(msg.Content))
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -143,10 +147,42 @@ func (m *Model) handleKey(msg keyMsg) (tea.Model, tea.Cmd) {
 	// Text input inserts at the cursor. Text is populated only for
 	// printable characters, which is exactly what belongs in a query.
 	if msg.Text != "" {
-		m.Query, m.QueryCursor = insertText(m.Query, m.QueryCursor, msg.Text)
-		return m, m.startSearchIfChanged()
+		return m.insertQueryText(msg.Text)
 	}
 	return m, nil
+}
+
+// insertQueryText inserts text through the shared grapheme-safe path used by
+// keyboard input, IME commits, and bracketed paste.
+func (m *Model) insertQueryText(text string) (tea.Model, tea.Cmd) {
+	if text == "" {
+		return m, nil
+	}
+	m.Query, m.QueryCursor = insertText(m.Query, m.QueryCursor, text)
+	return m, m.startSearchIfChanged()
+}
+
+// normalizePastedText turns each run of CR/LF line endings into one space so
+// pasted multi-line text remains a single-line query without joining words.
+func normalizePastedText(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	inLineBreak := false
+	for _, r := range s {
+		if r == '\r' || r == '\n' {
+			if !inLineBreak {
+				b.WriteByte(' ')
+				inLineBreak = true
+			}
+			continue
+		}
+		inLineBreak = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // startSearchIfChanged normalizes the current query before starting a search.
@@ -269,11 +305,16 @@ func deleteWordBefore(s string, i int) (string, int, bool) {
 
 // joinGraphemes concatenates clusters.
 func joinGraphemes(gs []string) string {
-	out := ""
+	var b strings.Builder
+	size := 0
 	for _, g := range gs {
-		out += g
+		size += len(g)
 	}
-	return out
+	b.Grow(size)
+	for _, g := range gs {
+		b.WriteString(g)
+	}
+	return b.String()
 }
 
 // isWhitespaceGrapheme reports whether a cluster is Unicode whitespace.

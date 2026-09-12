@@ -19,10 +19,12 @@ const Filename = "ejquick.log"
 // Logger writes timestamped lines to a log file (or io.Discard when
 // logging could not be set up). It is safe for concurrent use.
 type Logger struct {
-	mu    sync.Mutex
-	w     io.Writer
-	file  *os.File
-	debug bool
+	mu       sync.Mutex
+	w        io.Writer
+	file     *os.File
+	stderr   io.Writer
+	warnOnce sync.Once
+	debug    bool
 }
 
 // Nop returns a logger that discards everything.
@@ -78,7 +80,7 @@ func Open(debug bool) *Logger {
 		warnNoLog(err)
 		return Nop()
 	}
-	return &Logger{w: f, file: f, debug: debug}
+	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}
 }
 
 // OpenFile returns a logger appending to an explicit file path, creating
@@ -91,15 +93,23 @@ func OpenFile(path string, debug bool) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Logger{w: f, file: f, debug: debug}, nil
+	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}, nil
 }
 
 // Close releases the underlying file, if any.
 func (l *Logger) Close() error {
-	if l == nil || l.file == nil {
+	if l == nil {
 		return nil
 	}
-	return l.file.Close()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file == nil {
+		return nil
+	}
+	err := l.file.Close()
+	l.file = nil
+	l.w = io.Discard
+	return err
 }
 
 // DebugEnabled reports whether debug logging is on.
@@ -119,13 +129,25 @@ func (l *Logger) Debug(format string, args ...any) {
 }
 
 func (l *Logger) write(level, format string, args ...any) {
-	if l == nil || l.w == nil {
+	if l == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.w == nil {
+		return
+	}
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.w, "%s %s %s\n", time.Now().Format(time.RFC3339), level, msg)
+	if _, err := fmt.Fprintf(l.w, "%s %s %s\n", time.Now().Format(time.RFC3339), level, msg); err != nil {
+		l.warnOnce.Do(func() {
+			stderr := l.stderr
+			if stderr == nil {
+				stderr = os.Stderr
+			}
+			fmt.Fprintf(stderr, "ejquick: logging unavailable: write log: %v\n", err)
+		})
+		l.w = io.Discard
+	}
 }
 
 // warnNoLog prints a single stderr line explaining that logging is

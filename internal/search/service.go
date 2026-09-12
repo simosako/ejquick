@@ -199,9 +199,9 @@ func runeIndex(s, sub string) int {
 	if sub == "" {
 		return 0
 	}
-	first := []rune(sub)[0]
-	sr := []rune(s)
 	subR := []rune(sub)
+	first := subR[0]
+	sr := []rune(s)
 	for i := 0; i+len(subR) <= len(sr); i++ {
 		if sr[i] != first {
 			continue

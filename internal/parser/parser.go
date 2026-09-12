@@ -3,6 +3,8 @@
 // the single ASCII separator " : ".
 package parser
 
+//go:generate go run ../../tools/gencp932 -output cp932table.go
+
 import (
 	"bufio"
 	"fmt"

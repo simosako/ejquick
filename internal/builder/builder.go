@@ -21,6 +21,8 @@ import (
 // progressEvery is the physical-line interval for reading progress lines.
 const progressEvery = 100_000
 
+var sourceVersionPattern = regexp.MustCompile(`([0-9]+-[0-9]+)`)
+
 // Options controls one build run.
 type Options struct {
 	// Type selects the dictionary and its normalization rules.
@@ -286,7 +288,7 @@ func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr
 // falling back to "unknown".
 func sourceVersion(input string) string {
 	base := filepath.Base(input)
-	if m := regexp.MustCompile(`([0-9]+-[0-9]+)`).FindStringSubmatch(base); m != nil {
+	if m := sourceVersionPattern.FindStringSubmatch(base); m != nil {
 		return m[1]
 	}
 	return "unknown"

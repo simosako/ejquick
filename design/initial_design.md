@@ -216,6 +216,8 @@ BOOTH で購入した TXT ファイルをユーザー自身が指定して変換
 
 CP932 として不正な byte sequence を検出した場合は、Unicode replacement character へ置換して処理を継続せず、入力行番号と byte offset を報告して変換を停止する。
 
+CP932変換tableは、Unicode Consortiumが配布するMicrosoft CP932 mapping table version 2.01（1998-04-15）をchecksum検証して生成する。配布tableに含まれないWindows互換のuser-defined range `0xF040..0xF9FC` は、WHATWG Encoding StandardのShift_JIS decoder規則に従って `U+E000..U+E757` へ対応付ける。生成元URL、checksum、再生成手順は `tools/gencp932/README.md` に記録する。
+
 DB Builder 内で以下を行う。
 
 ```text
@@ -770,6 +772,8 @@ terminal全幅が80 columns未満、または高さが15 rows未満の場合は2
 文字入力、Backspace、Delete、Ctrl-W、Ctrl-Uはquery内容が実際に変化した場合だけ、request ID更新、旧検索cancel、新検索を行う。Left / Right、Home / End、Ctrl-A / Ctrl-Eはcursor移動だけを行い、検索を開始しない。削除対象がない場合もno-opとし、検索を開始しない。
 
 文字挿入、cursor移動、Backspace、DeleteはUnicode grapheme cluster単位で扱い、結合文字やemoji sequenceを途中で分断しない。Ctrl-Wはcursor直前のUnicode whitespaceを削除した後、その前に連続する非whitespace grapheme clusterを削除する。日本語のように空白を含まない文字列では、cursor直前の連続部分全体が対象となる。Ctrl-Uはcursor位置にかかわらずquery全体をclearし、E2の空query状態へ戻す。
+
+terminalのbracketed pasteは通常の文字入力と同じgrapheme-safeな挿入経路でqueryへ取り込む。貼り付け内容のCR/LFは、連続する1つ以上をASCII space 1文字へ置換し、queryは単一行のまま保つ。
 
 EnterとEscには初期リリースではactionを割り当てない。Ctrl-Cで実行中検索をcancelし、DB connectionとlogをcloseして終了する。
 
