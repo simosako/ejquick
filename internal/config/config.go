@@ -117,11 +117,6 @@ func (c *Config) validate() error {
 		return fmt.Errorf("search.max_results %d out of range 1..%d",
 			c.Search.MaxResults, search.HardMaxResults)
 	}
-	if c.Eiji.Database != "" && !filepath.IsAbs(expandHome(c.Eiji.Database)) {
-		// Relative paths are allowed; resolved against the config
-		// directory later. Nothing to reject here.
-		_ = c.Eiji.Database
-	}
 	return nil
 }
 
@@ -228,22 +223,4 @@ func resolvePath(base, p string) string {
 		return filepath.Clean(p)
 	}
 	return abs
-}
-
-// expandHome expands a leading ~ for validation use only.
-func expandHome(p string) string {
-	if !strings.HasPrefix(p, "~") {
-		return p
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return p
-	}
-	if p == "~" {
-		return home
-	}
-	if strings.HasPrefix(p, "~/") {
-		return filepath.Join(home, p[2:])
-	}
-	return p
 }

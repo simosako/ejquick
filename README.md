@@ -71,6 +71,7 @@ Options:
 -c, --config <path>             config file path
     --limit <1..500>            result limit for this process
     --format <plain|jsonl>      output format (CLI search only)
+    --debug                     enable debug logging to the log file
 -h, --help                      show help
 -v, --version                   show version
 ```

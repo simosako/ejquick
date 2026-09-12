@@ -4,7 +4,8 @@ EJQuick Third-Party Notices
 EJQuick embeds the following open-source modules in its release binaries.
 Each module remains under its own license; the list below reflects the
 dependency graph of the current release. Regenerate with
-`go version -m <binary>` after dependency updates.
+`go version -m <binary>` for both binaries on every release target after
+dependency updates, then use the union of the reported modules.
 
 MIT License
 -----------

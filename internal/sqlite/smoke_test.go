@@ -2,7 +2,6 @@ package sqlite_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -29,55 +28,6 @@ USING fts5(
     tokenize='trigram case_sensitive 1 remove_diacritics 0'
 );
 `
-
-func createFixtureDB(t *testing.T) {
-	t.Helper()
-	db, err := sqlite.OpenInMemory()
-	if err != nil {
-		t.Fatalf("open in-memory: %v", err)
-	}
-	defer db.Close()
-
-	if _, err := db.Exec(entriesSchema); err != nil {
-		t.Fatalf("create schema (FTS5/trigram may be unavailable): %v", err)
-	}
-
-	rows := []struct {
-		id   int64
-		hw   string
-		norm string
-		body string
-	}{
-		{1, "English", "english", "the English language"},
-		{2, "English breakfast", "english breakfast", "a cooked breakfast"},
-		{3, "take care", "take care", "be careful"},
-		{4, "care", "care", "attention"},
-	}
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	stmt, err := tx.Prepare("INSERT INTO entries(id, headword, headword_norm, body) VALUES (?, ?, ?, ?)")
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	defer stmt.Close()
-	for _, r := range rows {
-		if _, err := stmt.Exec(r.id, r.hw, r.norm, r.body); err != nil {
-			t.Fatalf("insert %d: %v", r.id, err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if _, err := db.Exec("INSERT INTO entries_fts(entries_fts) VALUES('rebuild')"); err != nil {
-		t.Fatalf("fts rebuild: %v", err)
-	}
-	if _, err := db.Exec("INSERT INTO entries_fts(entries_fts) VALUES('integrity-check')"); err != nil {
-		t.Fatalf("fts integrity-check: %v", err)
-	}
-}
 
 // TestSmokeFTS5Trigram verifies that the pure-Go driver ships with FTS5
 // enabled and that the trigram tokenizer works with the configured options
@@ -274,5 +224,3 @@ func TestSmokeParameterBinding(t *testing.T) {
 		t.Errorf("expected 1 match, got %d", count)
 	}
 }
-
-var _ = sql.DB{} // keep database/sql imported for documentation clarity

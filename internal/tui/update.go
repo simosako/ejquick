@@ -149,8 +149,7 @@ func (m *Model) handleKey(msg keyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// lastSearchedQuery remembers the query string of the current request so
-// no-op edits do not restart a search.
+// startSearchIfChanged normalizes the current query before starting a search.
 func (m *Model) startSearchIfChanged() tea.Cmd {
 	normQuery, _ := normalize.Normalize(m.Dictionary, m.Query)
 	if normQuery == "" {

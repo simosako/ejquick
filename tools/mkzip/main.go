@@ -8,7 +8,9 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -27,43 +29,68 @@ func main() {
 }
 
 func run(outPath, dir string) error {
+	dir = filepath.Clean(dir)
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("stat input directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("input is not a directory: %s", dir)
+	}
+
 	f, err := os.Create(outPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("create output: %w", err)
 	}
-	defer f.Close()
+	keepOutput := false
+	defer func() {
+		if !keepOutput {
+			_ = os.Remove(outPath)
+		}
+	}()
 
 	w := zip.NewWriter(f)
-	root := filepath.Base(filepath.Clean(dir))
-	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	root := filepath.Base(dir)
+	walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(filepath.Dir(dir), path)
+		rel, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
 		}
-		name := filepath.ToSlash(rel)
+		name := filepath.ToSlash(filepath.Join(root, rel))
 		zf, err := w.Create(name)
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		src, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		_, err = zf.Write(data)
-		return err
+		_, copyErr := io.Copy(zf, src)
+		closeErr := src.Close()
+		return errors.Join(copyErr, closeErr)
 	})
-	if cerr := w.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
+	zipCloseErr := w.Close()
+	fileCloseErr := f.Close()
+	if err := errors.Join(
+		walkErr,
+		wrapError("close zip", zipCloseErr),
+		wrapError("close output", fileCloseErr),
+	); err != nil {
 		return err
 	}
-	_ = root
+	keepOutput = true
 	return nil
+}
+
+func wrapError(action string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", action, err)
 }

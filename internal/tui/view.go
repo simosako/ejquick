@@ -6,8 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/rivo/uniseg"
-
-	"github.com/simosako/ejquick/internal/search"
 )
 
 // Layout constants from the design.
@@ -196,7 +194,7 @@ func (m *Model) renderRightRows(w int) []string {
 		return []string{m.bold("Search error: " + firstLine(m.SearchError))}
 	}
 	if m.Query == "" {
-		return m.guideRows(w)
+		return m.guideRows()
 	}
 	if len(m.Results) == 0 {
 		return []string{m.dim("No results")}
@@ -236,13 +234,12 @@ func (m *Model) renderRightRows(w int) []string {
 
 // guideRows renders the static empty-query guide. The Tab hint is hidden
 // when only one dictionary is available.
-func (m *Model) guideRows(w int) []string {
+func (m *Model) guideRows() []string {
 	rows := []string{m.dim("Type to search")}
 	if len(m.Available) >= 2 {
 		rows = append(rows, m.dim("Tab: switch dictionary"))
 	}
 	rows = append(rows, m.dim("Ctrl-C: quit"))
-	_ = w
 	return rows
 }
 
@@ -487,5 +484,3 @@ func firstLine(s string) string {
 
 func (m *Model) bold(s string) string { return styleBold + s + styleReset }
 func (m *Model) dim(s string) string  { return styleDim + s + styleReset }
-
-var _ = search.Entry{} // keep the search import for the entry type docs
