@@ -185,7 +185,7 @@ func TestCtrlUAndCtrlW(t *testing.T) {
 		t.Fatalf("query = %q", m.Query)
 	}
 	m = press(t, m, "ctrl+w")
-	if m.Query != "take " && m.Query != "take" {
+	if m.Query != "take " {
 		t.Errorf("after ctrl+w query = %q", m.Query)
 	}
 	if m.QueryCursor != graphemeCount(m.Query) {
@@ -215,6 +215,133 @@ func TestEmojiGraphemeEditing(t *testing.T) {
 	m = press(t, m, "backspace")
 	if m.Query != "ab" {
 		t.Errorf("after backspace query = %q", m.Query)
+	}
+}
+
+func TestTextInputMaintainsGraphemeCursor(t *testing.T) {
+	tests := []struct {
+		name           string
+		query          string
+		cursor         int
+		input          []string
+		wantQuery      string
+		wantCursor     int
+		wantBackspace  string
+		wantBackCursor int
+	}{
+		{
+			name:          "combining mark in separate event",
+			input:         []string{"e", "\u0301"},
+			wantQuery:     "e\u0301",
+			wantCursor:    1,
+			wantBackspace: "",
+		},
+		{
+			name:          "ZWJ joins surrounding emoji",
+			query:         "\U0001F469\U0001F4BB",
+			cursor:        1,
+			input:         []string{"\u200d"},
+			wantQuery:     "\U0001F469\u200d\U0001F4BB",
+			wantCursor:    1,
+			wantBackspace: "",
+		},
+		{
+			name:          "regional indicators in separate events",
+			input:         []string{"\U0001F1EF", "\U0001F1F5"},
+			wantQuery:     "\U0001F1EF\U0001F1F5",
+			wantCursor:    1,
+			wantBackspace: "",
+		},
+		{
+			name:           "multiple grapheme IME commit",
+			query:          "ac",
+			cursor:         1,
+			input:          []string{"日本語"},
+			wantQuery:      "a日本語c",
+			wantCursor:     4,
+			wantBackspace:  "a日本c",
+			wantBackCursor: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(dictionary.Eiji, nil, nil, nil)
+			m.Query = tt.query
+			m.QueryCursor = tt.cursor
+			for _, text := range tt.input {
+				next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: text}))
+				m = modelOf(t, next)
+				if m.QueryCursor < 0 || m.QueryCursor > graphemeCount(m.Query) {
+					t.Fatalf("query = %q cursor = %d is out of range", m.Query, m.QueryCursor)
+				}
+			}
+			if m.Query != tt.wantQuery || m.QueryCursor != tt.wantCursor {
+				t.Fatalf("query = %q cursor = %d, want %q cursor %d",
+					m.Query, m.QueryCursor, tt.wantQuery, tt.wantCursor)
+			}
+
+			m = press(t, m, "backspace")
+			if m.Query != tt.wantBackspace {
+				t.Errorf("after backspace query = %q, want %q", m.Query, tt.wantBackspace)
+			}
+			if m.QueryCursor != tt.wantBackCursor {
+				t.Errorf("after backspace cursor = %d, want %d",
+					m.QueryCursor, tt.wantBackCursor)
+			}
+		})
+	}
+}
+
+func TestDeleteWordBefore(t *testing.T) {
+	tests := []struct {
+		name       string
+		query      string
+		cursor     int
+		wantQuery  string
+		wantCursor int
+	}{
+		{
+			name:       "whitespace only",
+			query:      " \t\u3000",
+			cursor:     3,
+			wantQuery:  "",
+			wantCursor: 0,
+		},
+		{
+			name:       "leading whitespace before suffix",
+			query:      "  suffix",
+			cursor:     2,
+			wantQuery:  "suffix",
+			wantCursor: 0,
+		},
+		{
+			name:       "word before cursor with suffix",
+			query:      "take care later",
+			cursor:     9,
+			wantQuery:  "take  later",
+			wantCursor: 5,
+		},
+		{
+			name:       "whitespace and word before cursor",
+			query:      "take \tcare",
+			cursor:     6,
+			wantQuery:  "care",
+			wantCursor: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotQuery, gotCursor, ok := deleteWordBefore(tt.query, tt.cursor)
+			if !ok {
+				t.Fatal("deleteWordBefore reported no change")
+			}
+			if gotQuery != tt.wantQuery || gotCursor != tt.wantCursor {
+				t.Errorf("deleteWordBefore(%q, %d) = %q, %d; want %q, %d",
+					tt.query, tt.cursor, gotQuery, gotCursor, tt.wantQuery, tt.wantCursor)
+			}
+		})
 	}
 }
 

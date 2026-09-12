@@ -140,11 +140,10 @@ func (m *Model) handleKey(msg keyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Rune input inserts at the cursor. Text is populated only for
+	// Text input inserts at the cursor. Text is populated only for
 	// printable characters, which is exactly what belongs in a query.
 	if msg.Text != "" {
-		m.Query = insertRunes(m.Query, m.QueryCursor, msg.Text)
-		m.QueryCursor++
+		m.Query, m.QueryCursor = insertText(m.Query, m.QueryCursor, msg.Text)
 		return m, m.startSearchIfChanged()
 	}
 	return m, nil
@@ -201,9 +200,9 @@ func splitGraphemes(s string) []string {
 	return out
 }
 
-// insertRunes inserts text (one or more grapheme clusters) at the
-// grapheme index i.
-func insertRunes(s string, i int, text string) string {
+// insertText inserts text at grapheme index i and returns the cursor
+// position after re-segmenting the complete result.
+func insertText(s string, i int, text string) (string, int) {
 	gs := splitGraphemes(s)
 	if i < 0 {
 		i = 0
@@ -211,9 +210,22 @@ func insertRunes(s string, i int, text string) string {
 	if i > len(gs) {
 		i = len(gs)
 	}
-	var out string
-	out = joinGraphemes(gs[:i]) + text + joinGraphemes(gs[i:])
-	return out
+	prefix := joinGraphemes(gs[:i])
+	out := prefix + text + joinGraphemes(gs[i:])
+	cursorByte := len(prefix) + len(text)
+	consumed := 0
+	cursor := 0
+	for _, g := range splitGraphemes(out) {
+		if cursorByte == 0 {
+			break
+		}
+		consumed += len(g)
+		cursor++
+		if consumed >= cursorByte {
+			break
+		}
+	}
+	return out, cursor
 }
 
 // deleteBeforeCursor removes the grapheme cluster before index i.
@@ -247,7 +259,7 @@ func deleteWordBefore(s string, i int) (string, int, bool) {
 	}
 	if j == 0 {
 		// Only whitespace before the cursor: delete just that.
-		return joinGraphemes(gs[j:i]), j, true
+		return joinGraphemes(gs[i:]), j, true
 	}
 	for j > 0 && !isWhitespaceGrapheme(gs[j-1]) {
 		j--
