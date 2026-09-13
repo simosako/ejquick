@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
+	github.com/mappu/miqt v0.14.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/text v0.42.0

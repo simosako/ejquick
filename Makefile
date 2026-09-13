@@ -5,7 +5,7 @@ LDFLAGS := -X github.com/simosako/ejquick/internal/buildinfo.Version=$(VERSION)
 GORELEASER ?= goreleaser
 
 # Scratch binaries always go to tmp/ (never committed, see AGENTS.md).
-.PHONY: build test test-race vet fmt fmt-check tidy-check bench bench-smoke clean release-check
+.PHONY: build test test-race vet fmt fmt-check tidy-check bench bench-smoke clean release-check build-gui test-gui vet-gui
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick ./cmd/ejquick
@@ -36,8 +36,20 @@ bench:
 bench-smoke:
 	go test -run '^$$' -bench . -benchmem -benchtime=1x ./internal/builder ./internal/search
 
+# GUI targets (design D35). They build the `gui`-tagged packages only and
+# require a Qt 6 development toolchain reachable through pkg-config plus
+# CGO; every target above stays Pure Go and Qt-free.
+build-gui:
+	CGO_ENABLED=1 go build -tags gui -ldflags "$(LDFLAGS)" -o tmp/ejquick-gui ./cmd/ejquick-gui
+
+test-gui:
+	CGO_ENABLED=1 go test -tags gui ./internal/gui
+
+vet-gui:
+	CGO_ENABLED=1 go vet -tags gui ./internal/gui ./cmd/ejquick-gui
+
 clean:
-	rm -rf dist tmp/dist tmp/ejquick tmp/ejquick-build
+	rm -rf dist tmp/dist tmp/ejquick tmp/ejquick-build tmp/ejquick-gui
 
 # Validate the release configuration and build all release artifacts locally
 # without publishing them.
