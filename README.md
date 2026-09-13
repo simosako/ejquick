@@ -151,7 +151,16 @@ frontends. Database `schema_version`, `normalization_version`, and
 product version.
 
 The release Git tag is the source of truth. After the release commit has been
-reviewed, create and push an annotated tag:
+reviewed, run the project-local mise task and enter the desired version when
+prompted:
+
+```bash
+mise run release
+# Enter a version such as v0.1.0 when prompted.
+```
+
+The task checks that the working tree is clean and that the tag does not already
+exist, then runs the equivalent commands:
 
 ```bash
 git tag -a v0.1.0 -m "EJQuick v0.1.0"
