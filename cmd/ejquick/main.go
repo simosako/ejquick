@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/simosako/ejquick/internal/buildinfo"
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
 	"github.com/simosako/ejquick/internal/logging"
@@ -20,9 +21,6 @@ import (
 	"github.com/simosako/ejquick/internal/search"
 	"github.com/simosako/ejquick/internal/tui"
 )
-
-// version is stamped at build time with -ldflags.
-var version = "dev"
 
 const usage = `Usage: ejquick [options] [query]
 
@@ -138,7 +136,7 @@ func parseArgs(args []string, stdout io.Writer) (*cliOptions, string, bool, bool
 			fmt.Fprint(stdout, usage)
 			return nil, "", false, true, nil
 		case arg == "-v" || arg == "--version":
-			fmt.Fprintf(stdout, "ejquick %s\n", version)
+			fmt.Fprintf(stdout, "ejquick %s\n", buildinfo.Version)
 			return nil, "", false, true, nil
 		case arg == "-d" || arg == "--dictionary":
 			v, err := nextValue(args, &i, arg)

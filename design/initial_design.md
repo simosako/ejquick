@@ -1793,6 +1793,14 @@ macOS Apple Silicon を正式対象とする。
 
 各release archiveにはbinaryだけでなく、EJQuickの `LICENSE` と固定済み依存graphから生成した `THIRD_PARTY_NOTICES` を同梱する。
 
+### 23.1 バージョン管理
+
+EJQuickはコア、TUI / CLI、DB Builder、および将来追加するGUIを1つの製品として扱い、SemVer形式の製品バージョンを共有する。Git tagは `v0.1.0`、pre-releaseでは `v0.2.0-rc.1` の形式とし、release tagを製品バージョンの唯一の正とする。同じreleaseから生成される全binaryとfrontendには同じtagをbuild時に埋め込む。
+
+SQLite DBの互換性を表す `schema_version`、`normalization_version`、`fts_version` は製品バージョンとは独立して管理する。これらの値を変更する場合は対象の互換性定義を更新し、必要に応じてDBの再構築を要求する。`builder_version` にはDBを生成したEJQuick製品バージョンを記録する。辞書データ自体の版である `source_version` も製品バージョンへ統合しない。
+
+正式releaseはGoReleaserとGitHub Actionsで作成する。通常のbranch pushではCIを開始せず、pull request、手動実行、または `v*` tagを受け取ったrelease workflowから既存CIを実行する。release workflowは既存CIの全jobが成功した後にだけ、Linux、Windows、macOSのamd64 / arm64向け成果物とchecksumをGitHub Releasesへ公開する。
+
 ---
 
 ## 24. セキュリティ / プライバシー

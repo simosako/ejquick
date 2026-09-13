@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/simosako/ejquick/internal/dbformat"
 	"github.com/simosako/ejquick/internal/dictionary"
 	"github.com/simosako/ejquick/internal/normalize"
 	"github.com/simosako/ejquick/internal/sqlite"
@@ -82,10 +83,10 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 		return fmt.Errorf("index idx_entries_headword_norm starts with %q, want headword_norm", indexColumn)
 	}
 	want := map[string]string{
-		"schema_version":        "1",
+		"schema_version":        dbformat.SchemaVersion,
 		"dictionary_type":       dt.String(),
 		"normalization_version": normalize.Version,
-		"fts_version":           "1",
+		"fts_version":           dbformat.FTSVersion,
 	}
 	rows, err := db.Query("SELECT key, value FROM metadata")
 	if err != nil {

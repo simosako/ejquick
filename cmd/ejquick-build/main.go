@@ -9,11 +9,9 @@ import (
 	"os"
 
 	"github.com/simosako/ejquick/internal/builder"
+	"github.com/simosako/ejquick/internal/buildinfo"
 	"github.com/simosako/ejquick/internal/dictionary"
 )
-
-// version is stamped at build time with -ldflags.
-var version = "dev"
 
 const usage = `Usage: ejquick-build [options]
 
@@ -46,7 +44,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	builder.SetVersion(version)
+	builder.SetVersion(buildinfo.Version)
 	_, err = builder.Run(*opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "ejquick-build: %v\n", err)
@@ -81,7 +79,7 @@ func parseArgs(args []string, stdout, stderr io.Writer) (*builder.Options, bool,
 		return nil, true, nil
 	}
 	if *ver || *verLong {
-		fmt.Fprintf(stdout, "ejquick-build %s\n", version)
+		fmt.Fprintf(stdout, "ejquick-build %s\n", buildinfo.Version)
 		return nil, true, nil
 	}
 

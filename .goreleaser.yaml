@@ -1,0 +1,70 @@
+version: 2
+
+project_name: ejquick
+dist: tmp/dist
+
+builds:
+  - id: ejquick
+    main: ./cmd/ejquick
+    binary: ejquick
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w -X github.com/simosako/ejquick/internal/buildinfo.Version={{ .Tag }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: ejquick-build
+    main: ./cmd/ejquick-build
+    binary: ejquick-build
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w -X github.com/simosako/ejquick/internal/buildinfo.Version={{ .Tag }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: cli
+    ids:
+      - ejquick
+      - ejquick-build
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
+    wrap_in_directory: true
+    files:
+      - README.md
+      - LICENSE
+      - THIRD_PARTY_NOTICES
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  name_template: "EJQuick {{ .Tag }}"
+  prerelease: auto
+  draft: false

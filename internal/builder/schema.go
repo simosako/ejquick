@@ -3,19 +3,22 @@
 // trigram index for substring search.
 package builder
 
-import "github.com/simosako/ejquick/internal/normalize"
+import (
+	"github.com/simosako/ejquick/internal/dbformat"
+	"github.com/simosako/ejquick/internal/normalize"
+)
 
 // SchemaVersion identifies the database layout produced by the builder.
 // The search application refuses databases with an unknown value.
-const SchemaVersion = "1"
+const SchemaVersion = dbformat.SchemaVersion
 
 // FTSVersion identifies the FTS5 configuration (tokenizer options and
 // indexed columns). Changing the configuration requires a new version and
 // a rebuild.
-const FTSVersion = "1"
+const FTSVersion = dbformat.FTSVersion
 
-// BuilderVersion is the version string stored in the database metadata.
-// It is overridden at link time by the build command via SetVersion.
+// BuilderVersion is the product version stored in the database metadata.
+// The command sets it from the shared build information before a build.
 var BuilderVersion = "dev"
 
 // entriesSchema creates only the entries table: indexes are added after

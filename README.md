@@ -21,15 +21,15 @@ from source:
 
 ```bash
 make build                    # current platform, into tmp/
-make build VERSION=v0.1.0     # stamp a version
-make release VERSION=v0.1.0   # cross-build dist/ archives for all targets
+make build VERSION=v0.1.0     # optionally stamp a local build
 ```
 
 Or with plain `go build`:
 
 ```bash
-go build -ldflags "-X main.version=$(git describe --tags --always)" ./cmd/ejquick
-go build -ldflags "-X main.version=$(git describe --tags --always)" ./cmd/ejquick-build
+VERSION=$(git describe --tags --always --dirty)
+go build -ldflags "-X github.com/simosako/ejquick/internal/buildinfo.Version=$VERSION" ./cmd/ejquick
+go build -ldflags "-X github.com/simosako/ejquick/internal/buildinfo.Version=$VERSION" ./cmd/ejquick-build
 ```
 
 ## Quick start
@@ -129,12 +129,37 @@ make test-race
 make vet
 make tidy-check
 make bench
+make release-check
 ```
+
+`make release-check` requires GoReleaser v2.18.0 or later. It runs a local
+snapshot and does not publish anything.
 
 See [`bench/README.md`](bench/README.md) for reproducible real-data
 measurements. The helper only reads the purchased TXT path supplied to it;
 all generated SQLite databases and reports stay under the ignored `tmp/`
 directory and are never added to the repository.
+
+## Releasing
+
+EJQuick uses one Semantic Versioning product version for all executables and
+frontends. Database `schema_version`, `normalization_version`, and
+`fts_version` values are compatibility versions managed independently from the
+product version.
+
+The release Git tag is the source of truth. After the release commit has been
+reviewed, create and push an annotated tag:
+
+```bash
+git tag -a v0.1.0 -m "EJQuick v0.1.0"
+git push origin v0.1.0
+```
+
+Pushing a `v*` tag runs the complete CI workflow. If CI succeeds, GoReleaser
+builds Linux, Windows, and macOS archives for amd64 and arm64, stamps the same
+tag into both executables, and publishes the archives and `checksums.txt` to
+GitHub Releases. Ordinary branch pushes do not run CI; pull requests and
+manual workflow dispatches still do.
 
 ## License
 
