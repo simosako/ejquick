@@ -7,7 +7,9 @@ package search
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/simosako/ejquick/internal/dbformat"
@@ -38,13 +40,34 @@ type Repository struct {
 // OpenRepository opens the database at path read-only and verifies that it
 // was produced for the given dictionary type with a compatible schema.
 func OpenRepository(path string, dt dictionary.Type) (*Repository, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		category := OpenUnreadable
+		if os.IsNotExist(err) {
+			category = OpenMissing
+		}
+		return nil, openFailure(category, fmt.Errorf("stat %s: %w", path, err))
+	}
+	if !info.Mode().IsRegular() {
+		return nil, openFailure(OpenUnreadable,
+			fmt.Errorf("database %s is not a regular file", path))
+	}
 	db, err := sqlite.OpenReadOnly(path)
 	if err != nil {
-		return nil, err
+		return nil, openFailure(sqliteOpenCategory(err), err)
 	}
 	if err := verifySchema(db, dt); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("%s (%s): %w", path, dt, err)
+		wrapped := fmt.Errorf("%s (%s): %w", path, dt, err)
+		var schemaErr *schemaFailure
+		if errors.As(err, &schemaErr) {
+			return nil, openFailure(schemaErr.category, wrapped)
+		}
+		category := sqliteOpenCategory(err)
+		if category == OpenUnknown {
+			category = OpenIncompatible
+		}
+		return nil, openFailure(category, wrapped)
 	}
 	return &Repository{db: db, dt: dt}, nil
 }
@@ -82,12 +105,6 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 	if indexColumn != "headword_norm" {
 		return fmt.Errorf("index idx_entries_headword_norm starts with %q, want headword_norm", indexColumn)
 	}
-	want := map[string]string{
-		"schema_version":        dbformat.SchemaVersion,
-		"dictionary_type":       dt.String(),
-		"normalization_version": normalize.Version,
-		"fts_version":           dbformat.FTSVersion,
-	}
 	rows, err := db.Query("SELECT key, value FROM metadata")
 	if err != nil {
 		return err
@@ -104,7 +121,25 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	for k, w := range want {
+	gotDictionary := got["dictionary_type"]
+	if gotDictionary == dt.Other().String() {
+		return &schemaFailure{
+			category: OpenWrongDictionary,
+			err: fmt.Errorf("metadata dictionary_type = %q, want %q (rebuild the database)",
+				gotDictionary, dt.String()),
+		}
+	}
+	if gotDictionary != dt.String() {
+		return fmt.Errorf("metadata dictionary_type = %q, want %q (rebuild the database)",
+			gotDictionary, dt.String())
+	}
+	want := [][2]string{
+		{"schema_version", dbformat.SchemaVersion},
+		{"normalization_version", normalize.Version},
+		{"fts_version", dbformat.FTSVersion},
+	}
+	for _, pair := range want {
+		k, w := pair[0], pair[1]
 		if got[k] != w {
 			return fmt.Errorf("metadata %s = %q, want %q (rebuild the database)", k, got[k], w)
 		}

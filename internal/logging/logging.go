@@ -22,6 +22,7 @@ type Logger struct {
 	mu       sync.Mutex
 	w        io.Writer
 	file     *os.File
+	path     string
 	stderr   io.Writer
 	warnOnce sync.Once
 	debug    bool
@@ -80,7 +81,7 @@ func Open(debug bool) *Logger {
 		warnNoLog(err)
 		return Nop()
 	}
-	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}
+	return &Logger{w: f, file: f, path: path, stderr: os.Stderr, debug: debug}
 }
 
 // OpenFile returns a logger appending to an explicit file path, creating
@@ -93,7 +94,7 @@ func OpenFile(path string, debug bool) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}, nil
+	return &Logger{w: f, file: f, path: path, stderr: os.Stderr, debug: debug}, nil
 }
 
 // Close releases the underlying file, if any.
@@ -108,12 +109,23 @@ func (l *Logger) Close() error {
 	}
 	err := l.file.Close()
 	l.file = nil
+	l.path = ""
 	l.w = io.Discard
 	return err
 }
 
 // DebugEnabled reports whether debug logging is on.
 func (l *Logger) DebugEnabled() bool { return l != nil && l.debug }
+
+// Path returns the log file path while file logging is available.
+func (l *Logger) Path() (string, bool) {
+	if l == nil {
+		return "", false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.path, l.file != nil && l.path != ""
+}
 
 // Error appends an ERROR line.
 func (l *Logger) Error(format string, args ...any) {
@@ -147,6 +159,7 @@ func (l *Logger) write(level, format string, args ...any) {
 			fmt.Fprintf(stderr, "ejquick: logging unavailable: write log: %v\n", err)
 		})
 		l.w = io.Discard
+		l.path = ""
 	}
 }
 
