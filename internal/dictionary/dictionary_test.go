@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseType(t *testing.T) {
-	for _, s := range []string{"eiji", "waei"} {
+	for _, s := range []string{"eiwa", "waei"} {
 		got, err := dictionary.ParseType(s)
 		if err != nil {
 			t.Errorf("ParseType(%q) unexpected error: %v", s, err)
@@ -17,7 +17,7 @@ func TestParseType(t *testing.T) {
 			t.Errorf("ParseType(%q) = %q", s, got)
 		}
 	}
-	for _, s := range []string{"", "Eiji", "EIJI", "jp", "en"} {
+	for _, s := range []string{"", "eiji", "Eiji", "EIJI", "Eiwa", "EIWA", "jp", "en"} {
 		if _, err := dictionary.ParseType(s); err == nil {
 			t.Errorf("ParseType(%q) expected error", s)
 		}
@@ -25,8 +25,8 @@ func TestParseType(t *testing.T) {
 }
 
 func TestLabels(t *testing.T) {
-	if dictionary.Eiji.Label() != "EIJI" {
-		t.Errorf("eiji label = %q", dictionary.Eiji.Label())
+	if dictionary.Eiwa.Label() != "EIWA" {
+		t.Errorf("eiwa label = %q", dictionary.Eiwa.Label())
 	}
 	if dictionary.Waei.Label() != "WAEI" {
 		t.Errorf("waei label = %q", dictionary.Waei.Label())
@@ -34,10 +34,10 @@ func TestLabels(t *testing.T) {
 }
 
 func TestOther(t *testing.T) {
-	if dictionary.Eiji.Other() != dictionary.Waei {
-		t.Errorf("eiji other = %q", dictionary.Eiji.Other())
+	if dictionary.Eiwa.Other() != dictionary.Waei {
+		t.Errorf("eiwa other = %q", dictionary.Eiwa.Other())
 	}
-	if dictionary.Waei.Other() != dictionary.Eiji {
+	if dictionary.Waei.Other() != dictionary.Eiwa {
 		t.Errorf("waei other = %q", dictionary.Waei.Other())
 	}
 }

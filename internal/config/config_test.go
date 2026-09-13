@@ -31,8 +31,8 @@ func TestLoadFullConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := writeConfig(t, fmt.Sprintf(`
-[eiji]
-database = "~/.local/share/ejquick/eiji.sqlite3"
+[eiwa]
+database = "~/.local/share/ejquick/eiwa.sqlite3"
 
 [waei]
 database = %q
@@ -45,8 +45,8 @@ max_results = 100
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Database(dictionary.Eiji) != filepath.Join(home, ".local", "share", "ejquick", "eiji.sqlite3") {
-		t.Errorf("eiji db = %q", cfg.Database(dictionary.Eiji))
+	if cfg.Database(dictionary.Eiwa) != filepath.Join(home, ".local", "share", "ejquick", "eiwa.sqlite3") {
+		t.Errorf("eiwa db = %q", cfg.Database(dictionary.Eiwa))
 	}
 	if cfg.Database(dictionary.Waei) != absoluteDB {
 		t.Errorf("waei db = %q", cfg.Database(dictionary.Waei))
@@ -65,31 +65,31 @@ func TestLoadDefaultsWhenOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.DefaultDict() != dictionary.Eiji {
+	if cfg.DefaultDict() != dictionary.Eiwa {
 		t.Errorf("default dict = %q", cfg.DefaultDict())
 	}
 	if cfg.Search.MaxResults != 50 {
 		t.Errorf("max results = %d", cfg.Search.MaxResults)
 	}
-	eiji := cfg.Database(dictionary.Eiji)
-	if !strings.Contains(filepath.ToSlash(eiji), "ejquick/eiji.sqlite3") {
-		t.Errorf("default eiji db path = %q", eiji)
+	eiwa := cfg.Database(dictionary.Eiwa)
+	if !strings.Contains(filepath.ToSlash(eiwa), "ejquick/eiwa.sqlite3") {
+		t.Errorf("default eiwa db path = %q", eiwa)
 	}
 }
 
 func TestLoadRelativePathResolvedAgainstConfigDir(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(p, []byte("[eiji]\ndatabase = \"../data/eiji.sqlite3\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("[eiwa]\ndatabase = \"../data/eiwa.sqlite3\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(filepath.Dir(dir), "data", "eiji.sqlite3")
-	if cfg.Database(dictionary.Eiji) != want {
-		t.Errorf("relative path = %q, want %q", cfg.Database(dictionary.Eiji), want)
+	want := filepath.Join(filepath.Dir(dir), "data", "eiwa.sqlite3")
+	if cfg.Database(dictionary.Eiwa) != want {
+		t.Errorf("relative path = %q, want %q", cfg.Database(dictionary.Eiwa), want)
 	}
 }
 
@@ -99,6 +99,8 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		body string
 	}{
 		{"bad dictionary", "[search]\ndefault_dictionary = \"en\"\n"},
+		{"legacy dictionary", "[search]\ndefault_dictionary = \"eiji\"\n"},
+		{"legacy section", "[eiji]\ndatabase = \"legacy.sqlite3\"\n"},
 		{"max results zero", "[search]\nmax_results = 0\n"},
 		{"max results too large", "[search]\nmax_results = 501\n"},
 		{"max results negative", "[search]\nmax_results = -1\n"},

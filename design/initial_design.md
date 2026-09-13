@@ -112,7 +112,7 @@ Bubble Tea の既存コンポーネントを無理に利用するのではなく
                          +-------------+
                                |
                                v
-                         eiji.sqlite3
+                         eiwa.sqlite3
                                |
                                |
                                +-------------------+
@@ -141,7 +141,7 @@ Bubble Tea の既存コンポーネントを無理に利用するのではなく
 
 ```text
 ~/.local/share/ejquick/
-├── eiji.sqlite3
+├── eiwa.sqlite3
 └── waei.sqlite3
 ```
 
@@ -253,7 +253,7 @@ Builder は読込行数、登録件数、skip件数を完了時に表示し、DB
 英和・和英は利用目的、検索キー、将来的な追加属性が異なる可能性があるため、DB file を分離する。
 
 ```text
-eiji.sqlite3
+eiwa.sqlite3
 waei.sqlite3
 ```
 
@@ -282,7 +282,7 @@ waei.sqlite3
 例:
 
 ```text
-eiji.sqlite3
+eiwa.sqlite3
 ├── entries
 ├── entries_fts
 └── metadata
@@ -726,7 +726,7 @@ right_width = pane_width - 1 - left_width
 
 左ペインは利用可能幅のおよそ1/3とし、最小24 columns、最大50 columnsに制限する。右ペインには中央区切りを除いた残りすべてを割り当て、長い本文の表示を優先する。statusとquery入力欄はペイン分割の下でterminal全幅を使用する。
 
-通常時のstatusは現在の辞書名だけを `EIJI` または `WAEI` と表示する。Auto、内部検索方式、取得件数、選択位置、検索latency、DB path、request IDは表示しない。検索latencyなどの診断情報はdebug logで確認する。
+通常時のstatusは現在の辞書名だけを `EIWA` または `WAEI` と表示する。Auto、内部検索方式、取得件数、選択位置、検索latency、DB path、request IDは表示しない。検索latencyなどの診断情報はdebug logで確認する。
 
 DB fallbackや利用できない辞書へのTab操作など、利用者へ伝えるべき短い警告がある場合だけ通常の辞書名を警告文へ置き換える。警告は次の通常操作でclearし、現在の辞書名表示へ戻す。current requestの検索errorはstatusではなく右ペインへ表示し、右ペインのscroll indicatorはstatusとは別に扱う。
 
@@ -962,7 +962,7 @@ ejquick -- "-prefix"
 初期リリースでは以下を提供する。
 
 ```text
--d, --dictionary <eiji|waei>
+-d, --dictionary <eiwa|waei>
 -c, --config <path>
     --limit <1..500>
     --format <plain|jsonl>
@@ -999,7 +999,7 @@ meaning and description...
 `--format jsonl` では1エントリを1つのJSON objectとして1行に出力する。
 
 ```json
-{"id":123,"dictionary":"eiji","headword":"English","body":"meaning and description..."}
+{"id":123,"dictionary":"eiwa","headword":"English","body":"meaning and description..."}
 ```
 
 fieldは `id`、`dictionary`、`headword`、`body` に固定し、`headword_norm`、FTS rank、内部の一致位置は出力しない。文字列は標準JSON規則でescapeし、各objectをnewlineで終了する。JSON配列にはせず、検索結果を順次処理できるようにする。
@@ -1067,20 +1067,20 @@ OSごとの環境変数や慣習は `os.UserConfigDir()` に従い、独自のfa
 ### 13.3 設定例
 
 ```toml
-[eiji]
-database = "~/.local/share/ejquick/eiji.sqlite3"
+[eiwa]
+database = "~/.local/share/ejquick/eiwa.sqlite3"
 
 [waei]
 database = "~/.local/share/ejquick/waei.sqlite3"
 
 [search]
-default_dictionary = "eiji"
+default_dictionary = "eiwa"
 max_results = 50
 ```
 
 `search.max_results` を省略した場合は50を使用する。1〜500の範囲外は起動時の設定エラーとし、暗黙に丸めない。
 
-`search.default_dictionary` は `eiji` または `waei` とし、それ以外は設定エラーとする。指定した既定辞書が利用できない場合のfallbackは19.1の規則に従う。
+`search.default_dictionary` は `eiwa` または `waei` とし、それ以外は設定エラーとする。指定した既定辞書が利用できない場合のfallbackは19.1の規則に従う。
 
 候補項目:
 
@@ -1100,9 +1100,9 @@ max_results = 50
 
 ```bash
 ejquick-build \
-  --type eiji \
+  --type eiwa \
   --input EIJIRO144-10.TXT \
-  --output eiji.sqlite3
+  --output eiwa.sqlite3
 ```
 
 和英:
@@ -1117,7 +1117,7 @@ ejquick-build \
 既存DBを明示的に置換する場合のみ `--force` を指定する。
 
 ```bash
-ejquick-build --type eiji --input EIJIRO144-10.TXT --output eiji.sqlite3 --force
+ejquick-build --type eiwa --input EIJIRO144-10.TXT --output eiwa.sqlite3 --force
 ```
 
 ### 14.2 変換フロー
@@ -1214,9 +1214,9 @@ PRAGMA cache_size = -131072;
 
 ```bash
 ejquick-build \
-  --type eiji \
+  --type eiwa \
   --input EIJIRO144-10.TXT \
-  --output eiji.sqlite3 \
+  --output eiwa.sqlite3 \
   --compact
 ```
 
@@ -1327,7 +1327,7 @@ internal/
 ├── sqlite/
 ├── tui/
 ├── parser/
-│   ├── eiji/
+│   ├── eiwa/
 │   └── waei/
 ├── normalize/
 └── builder/
@@ -1484,11 +1484,11 @@ FTS5 index により DB ファイルは TXT より大きくなる可能性が高
 例:
 
 ```text
-eiji database not found:
-  ~/.local/share/ejquick/eiji.sqlite3
+eiwa database not found:
+  ~/.local/share/ejquick/eiwa.sqlite3
 
 Create it with:
-  ejquick-build --type eiji ...
+  ejquick-build --type eiwa ...
 ```
 
 起動後の検索errorでは、request IDがcurrentであることと `context.Canceled` でないことを確認する。current requestのerrorだけを右ペインへ短く表示し、詳細をlog fileへ記録する。前回の検索結果はclearするがqueryは維持し、TUIは継続する。
@@ -1939,7 +1939,7 @@ GitHub
 Local only
   EIJIRO*.TXT
   WAEIJI*.TXT
-  eiji.sqlite3
+  eiwa.sqlite3
   waei.sqlite3
 ```
 
@@ -1981,7 +1981,7 @@ Substring search
   headword_norm only
 
 Normalization
-  eiji: NFC + Unicode Case Folding
+  eiwa: NFC + Unicode Case Folding
   waei: NFKC + Unicode Case Folding
 
 Configuration
@@ -1994,7 +1994,7 @@ Internal encoding
   UTF-8
 
 Databases
-  eiji.sqlite3
+  eiwa.sqlite3
   waei.sqlite3
 
 Binaries

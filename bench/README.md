@@ -21,7 +21,7 @@ records build timing and resource output, samples peak build-directory use,
 and runs search benchmarks against the normal database:
 
 ```bash
-bench/run-real.sh --type eiji --input /path/to/EIJIRO.TXT
+bench/run-real.sh --type eiwa --input /path/to/EIJIRO.TXT
 bench/run-real.sh --type waei --input /path/to/WAEIJI.TXT
 ```
 
@@ -44,8 +44,8 @@ TXT or generated SQLite files into a tracked directory.
 To benchmark an already-built local database directly:
 
 ```bash
-EJQUICK_BENCH_EIJI_DB=/path/to/eiji.sqlite3 \
-EJQUICK_BENCH_EIJI_QUERIES='e|en|eng' \
+EJQUICK_BENCH_EIWA_DB=/path/to/eiwa.sqlite3 \
+EJQUICK_BENCH_EIWA_QUERIES='e|en|eng' \
 go test -run '^$' -bench '^BenchmarkReal' -benchmem -count 10 ./bench
 ```
 

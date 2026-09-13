@@ -18,7 +18,7 @@ const usage = `Usage: ejquick-build [options]
 Build an EJQuick dictionary database from a CP932 TXT file.
 
 Options:
-  --type <eiji|waei>    dictionary type (required)
+  --type <eiwa|waei>    dictionary type (required)
   --input <path>        source TXT file (required)
   --output <path>       destination SQLite database (required)
   --force               replace an existing output database
@@ -61,7 +61,7 @@ func parseArgs(args []string, stdout, stderr io.Writer) (*builder.Options, bool,
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 
 	var (
-		typeStr  = fs.String("type", "", "dictionary type: eiji or waei")
+		typeStr  = fs.String("type", "", "dictionary type: eiwa or waei")
 		input    = fs.String("input", "", "source TXT file")
 		output   = fs.String("output", "", "destination database")
 		force    = fs.Bool("force", false, "replace existing output")

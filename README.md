@@ -37,7 +37,7 @@ go build -ldflags "-X github.com/simosako/ejquick/internal/buildinfo.Version=$VE
 1. Build a dictionary database from a purchased TXT file (CP932 encoded):
 
 ```bash
-ejquick-build --type eiji --input EIJIRO144-10.TXT --output ~/.local/share/ejquick/eiji.sqlite3
+ejquick-build --type eiwa --input EIJIRO144-10.TXT --output ~/.local/share/ejquick/eiwa.sqlite3
 ejquick-build --type waei --input WAEIJI-144-10.TXT --output ~/.local/share/ejquick/waei.sqlite3
 ```
 
@@ -67,7 +67,7 @@ ejquick --format jsonl --limit 20 care
 Options:
 
 ```text
--d, --dictionary <eiji|waei>    dictionary to search
+-d, --dictionary <eiwa|waei>    dictionary to search
 -c, --config <path>             config file path
     --limit <1..500>            result limit for this process
     --format <plain|jsonl>      output format (CLI search only)
@@ -90,14 +90,14 @@ Windows: %AppData%\ejquick\config.toml
 ```
 
 ```toml
-[eiji]
-database = "~/.local/share/ejquick/eiji.sqlite3"
+[eiwa]
+database = "~/.local/share/ejquick/eiwa.sqlite3"
 
 [waei]
 database = "~/.local/share/ejquick/waei.sqlite3"
 
 [search]
-default_dictionary = "eiji"
+default_dictionary = "eiwa"
 max_results = 50
 ```
 

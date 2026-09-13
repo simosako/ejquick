@@ -26,7 +26,7 @@ Instead, use the project-local `tmp/` directory for all throwaway and
 verification artifacts:
 
 - Built binaries (`ejquick`, `ejquick-build`)
-- Generated SQLite databases (`eiji.sqlite3`, `waei.sqlite3`)
+- Generated SQLite databases (`eiwa.sqlite3`, `waei.sqlite3`)
 - Test config files (`config.toml`)
 - Any other build or run output used for verification
 

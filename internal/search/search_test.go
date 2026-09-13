@@ -64,7 +64,7 @@ undercare : not a real word but unique
 
 func newService(t *testing.T, path string, maxResults int) *search.Service {
 	t.Helper()
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if err != nil {
 		t.Fatalf("open repository: %v", err)
 	}
@@ -85,7 +85,7 @@ func headwords(entries []search.Entry) []string {
 }
 
 func TestSearchExactComesFirstThenShorter(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 
 	entries, err := svc.Search(context.Background(), "care")
@@ -151,7 +151,7 @@ func trimCR(s string) string {
 }
 
 func TestSearchTwoRunesPrefixOnly(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 
 	entries, err := svc.Search(context.Background(), "ca")
@@ -176,7 +176,7 @@ func TestSearchTwoRunesPrefixOnly(t *testing.T) {
 }
 
 func TestSearchThreeRunesAddsSubstring(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 
 	entries, err := svc.Search(context.Background(), "are")
@@ -200,7 +200,7 @@ func TestSearchThreeRunesAddsSubstring(t *testing.T) {
 }
 
 func TestSearchRespectsMaxResults(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 3)
 	entries, err := svc.Search(context.Background(), "care")
 	if err != nil {
@@ -212,7 +212,7 @@ func TestSearchRespectsMaxResults(t *testing.T) {
 }
 
 func TestSearchEmptyQuery(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 	for _, q := range []string{"", "   ", "\t"} {
 		entries, err := svc.Search(context.Background(), q)
@@ -226,7 +226,7 @@ func TestSearchEmptyQuery(t *testing.T) {
 }
 
 func TestSearchCaseFolding(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 
 	lower, err := svc.Search(context.Background(), "care")
@@ -252,7 +252,7 @@ func TestSearchCaseFolding(t *testing.T) {
 }
 
 func TestOpenRepositoryRejectsOldNormalizationVersion(t *testing.T) {
-	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	path := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +265,7 @@ func TestOpenRepositoryRejectsOldNormalizationVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if repo != nil {
 		repo.Close()
 	}
@@ -275,7 +275,7 @@ func TestOpenRepositoryRejectsOldNormalizationVersion(t *testing.T) {
 }
 
 func TestSearchLiteralFTSOperators(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, []string{
+	db := buildFixtureDB(t, dictionary.Eiwa, []string{
 		`AND OR : operators`,
 		`plain : entry`,
 		`"quoted" : entry with quotes`,
@@ -299,7 +299,7 @@ func TestSearchLiteralFTSOperators(t *testing.T) {
 }
 
 func TestSearchNoResults(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 	entries, err := svc.Search(context.Background(), "zzzzz")
 	if err != nil {
@@ -311,8 +311,8 @@ func TestSearchNoResults(t *testing.T) {
 }
 
 func TestNewServiceValidatesLimit(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
-	repo, err := search.OpenRepository(db, dictionary.Eiji)
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
+	repo, err := search.OpenRepository(db, dictionary.Eiwa)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,14 +330,37 @@ func TestNewServiceValidatesLimit(t *testing.T) {
 }
 
 func TestOpenRepositoryRejectsWrongDictionary(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	if _, err := search.OpenRepository(db, dictionary.Waei); err == nil {
-		t.Error("opening an eiji database as waei unexpectedly succeeded")
+		t.Error("opening an eiwa database as waei unexpectedly succeeded")
+	}
+}
+
+func TestOpenRepositoryRejectsLegacyDictionaryMetadata(t *testing.T) {
+	path := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE metadata SET value = 'eiji' WHERE key = 'dictionary_type'"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
+	if repo != nil {
+		repo.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), `metadata dictionary_type = "eiji", want "eiwa"`) {
+		t.Fatalf("OpenRepository error = %v, want legacy dictionary metadata rejection", err)
 	}
 }
 
 func TestOpenRepositoryRejectsMissingPrefixIndex(t *testing.T) {
-	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	path := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +373,7 @@ func TestOpenRepositoryRejectsMissingPrefixIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if repo != nil {
 		repo.Close()
 	}
@@ -360,7 +383,7 @@ func TestOpenRepositoryRejectsMissingPrefixIndex(t *testing.T) {
 }
 
 func TestOpenRepositoryRejectsPrefixIndexOnWrongColumn(t *testing.T) {
-	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	path := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +400,7 @@ func TestOpenRepositoryRejectsPrefixIndexOnWrongColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if repo != nil {
 		repo.Close()
 	}
@@ -387,7 +410,7 @@ func TestOpenRepositoryRejectsPrefixIndexOnWrongColumn(t *testing.T) {
 }
 
 func TestOpenRepositoryRejectsInvalidFTSTable(t *testing.T) {
-	path := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	path := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -404,7 +427,7 @@ func TestOpenRepositoryRejectsInvalidFTSTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if repo != nil {
 		repo.Close()
 	}
@@ -414,7 +437,7 @@ func TestOpenRepositoryRejectsInvalidFTSTable(t *testing.T) {
 }
 
 func TestSearchContextCanceled(t *testing.T) {
-	db := buildFixtureDB(t, dictionary.Eiji, fixtureLines(t))
+	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	svc := newService(t, db, 50)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

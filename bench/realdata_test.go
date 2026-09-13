@@ -21,7 +21,7 @@ type databaseSpec struct {
 func BenchmarkRealSearch(b *testing.B) {
 	specs := configuredDatabases()
 	if len(specs) == 0 {
-		b.Skip("set EJQUICK_BENCH_EIJI_DB or EJQUICK_BENCH_WAEI_DB")
+		b.Skip("set EJQUICK_BENCH_EIWA_DB or EJQUICK_BENCH_WAEI_DB")
 	}
 	ctx := context.Background()
 	for _, spec := range specs {
@@ -56,7 +56,7 @@ func BenchmarkRealSearch(b *testing.B) {
 func BenchmarkRealOpenRepository(b *testing.B) {
 	specs := configuredDatabases()
 	if len(specs) == 0 {
-		b.Skip("set EJQUICK_BENCH_EIJI_DB or EJQUICK_BENCH_WAEI_DB")
+		b.Skip("set EJQUICK_BENCH_EIWA_DB or EJQUICK_BENCH_WAEI_DB")
 	}
 	for _, spec := range specs {
 		b.Run(spec.dictionary.String(), func(b *testing.B) {
@@ -81,7 +81,7 @@ func configuredDatabases() []databaseSpec {
 		queryEnv   string
 		defaults   string
 	}{
-		{dictionary.Eiji, "EJQUICK_BENCH_EIJI_DB", "EJQUICK_BENCH_EIJI_QUERIES", "e|en|eng"},
+		{dictionary.Eiwa, "EJQUICK_BENCH_EIWA_DB", "EJQUICK_BENCH_EIWA_QUERIES", "e|en|eng"},
 		{dictionary.Waei, "EJQUICK_BENCH_WAEI_DB", "EJQUICK_BENCH_WAEI_QUERIES", "日|日本|日本語"},
 	}
 	var specs []databaseSpec

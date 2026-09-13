@@ -40,10 +40,10 @@ whether the OS page cache was cold or warm.
 
 | Dictionary | Query class | Match path | Cache | ns/op | B/op | allocs/op | Results |
 |---|---|---|---|---:|---:|---:|---:|
-| Eiji | 1 rune | prefix | warm | | | | |
-| Eiji | 2 runes | prefix | warm | | | | |
-| Eiji | 3+ runes | prefix | warm | | | | |
-| Eiji | 3+ runes | substring | warm | | | | |
+| Eiwa | 1 rune | prefix | warm | | | | |
+| Eiwa | 2 runes | prefix | warm | | | | |
+| Eiwa | 3+ runes | prefix | warm | | | | |
+| Eiwa | 3+ runes | substring | warm | | | | |
 | Waei | 1 rune | prefix | warm | | | | |
 | Waei | 2 runes | prefix | warm | | | | |
 | Waei | 3+ runes | substring | warm | | | | |

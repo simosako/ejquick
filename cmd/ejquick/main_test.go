@@ -82,6 +82,7 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 		{"--unknown"},
 		{"--dictionary"},
 		{"--dictionary", "unknown", "query"},
+		{"--dictionary", "eiji", "query"},
 		{"--limit", "0", "query"},
 		{"--limit", "501", "query"},
 		{"--format", "xml", "query"},
@@ -176,7 +177,7 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 			name:       "jsonl",
 			args:       []string{"--config", configPath, "--format", "jsonl", "alpha"},
 			wantCode:   0,
-			wantOutput: "{\"id\":1,\"dictionary\":\"eiji\",\"headword\":\"Alpha\",\"body\":\"first body\"}\n",
+			wantOutput: "{\"id\":1,\"dictionary\":\"eiwa\",\"headword\":\"Alpha\",\"body\":\"first body\"}\n",
 		},
 		{
 			name:     "no results",
@@ -210,13 +211,13 @@ func TestRunCLISearchFormatsAndExitCodes(t *testing.T) {
 
 func TestRunCLIOptionsOverrideConfigForThisProcess(t *testing.T) {
 	setTestAppDirs(t)
-	eijiPath := buildTestDatabaseWith(t, dictionary.Eiji, "\x81\xa1Alpha : eiji body\r\n")
+	eiwaPath := buildTestDatabaseWith(t, dictionary.Eiwa, "\x81\xa1Alpha : eiwa body\r\n")
 	waeiPath := buildTestDatabaseWith(t, dictionary.Waei,
 		"\x81\xa1Alpha : waei exact\r\n\x81\xa1Alphabet : waei prefix\r\n")
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	configBody := fmt.Sprintf(
-		"[eiji]\ndatabase = %s\n\n[waei]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiji\"\nmax_results = 2\n",
-		strconv.Quote(eijiPath), strconv.Quote(waeiPath))
+		"[eiwa]\ndatabase = %s\n\n[waei]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiwa\"\nmax_results = 2\n",
+		strconv.Quote(eiwaPath), strconv.Quote(waeiPath))
 	if err := os.WriteFile(configPath, []byte(configBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +262,7 @@ func TestRunCLIDebugLogUsesNormalizedQueryAndRequestID(t *testing.T) {
 	if strings.Count(logText, " DEBUG ") != 1 || strings.Contains(logText, " ERROR ") {
 		t.Fatalf("log = %q, want one DEBUG line", logText)
 	}
-	if !strings.Contains(logText, `cli search dict=eiji request=1 query="alpha" results=1`) {
+	if !strings.Contains(logText, `cli search dict=eiwa request=1 query="alpha" results=1`) {
 		t.Errorf("log missing normalized query or request ID: %q", logText)
 	}
 	if strings.Contains(logText, " ALPHA ") {
@@ -411,7 +412,7 @@ func setTestAppDirs(t *testing.T) {
 
 func buildTestDatabase(t *testing.T) string {
 	t.Helper()
-	return buildTestDatabaseWith(t, dictionary.Eiji,
+	return buildTestDatabaseWith(t, dictionary.Eiwa,
 		"\x81\xa1Alpha : first body\r\n\x81\xa1-prefix : dash body\r\n")
 }
 
@@ -434,7 +435,7 @@ func buildTestDatabaseWith(t *testing.T, dt dictionary.Type, contents string) st
 func writeTestConfig(t *testing.T, dbPath string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
-	body := fmt.Sprintf("[eiji]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiji\"\nmax_results = 50\n", strconv.Quote(dbPath))
+	body := fmt.Sprintf("[eiwa]\ndatabase = %s\n\n[search]\ndefault_dictionary = \"eiwa\"\nmax_results = 50\n", strconv.Quote(dbPath))
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

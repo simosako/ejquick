@@ -26,7 +26,7 @@ func TestInsertEntriesReportsProgressInterval(t *testing.T) {
 	input := strings.NewReader(strings.Repeat("\x81\xa1entry : artificial body\r\n", progressEvery+1))
 	var progress bytes.Buffer
 	var stats Stats
-	if err := insertEntries(db, input, Options{Type: dictionary.Eiji, Progress: &progress}, &stats); err != nil {
+	if err := insertEntries(db, input, Options{Type: dictionary.Eiwa, Progress: &progress}, &stats); err != nil {
 		t.Fatal(err)
 	}
 	want := "Reading: start\n" +
@@ -40,7 +40,7 @@ func TestInsertEntriesReportsProgressInterval(t *testing.T) {
 func TestRunPublishFailurePreservesExistingOutput(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "EIJIRO1-0.TXT")
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if err := os.WriteFile(input, []byte("\x81\xa1alpha : artificial body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestRunPublishFailurePreservesExistingOutput(t *testing.T) {
 	wantErr := errors.New("injected publish failure")
 	publishCalled := false
 	_, err := run(Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Force: true, Progress: io.Discard,
+		Type: dictionary.Eiwa, Input: input, Output: output, Force: true, Progress: io.Discard,
 	}, func(tmpPath, gotOutput string) error {
 		publishCalled = true
 		if gotOutput != output {

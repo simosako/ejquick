@@ -25,7 +25,7 @@ var folder = cases.Fold()
 // Normalize returns the normalized search key for a headword or query
 // according to the dictionary type:
 //
-//	eiji: trim spaces, NFC, Unicode case folding
+//	eiwa: trim spaces, NFC, Unicode case folding
 //	waei: trim spaces, NFKC, Unicode case folding
 //
 // NFC/NFKC are applied first so that folding sees canonically equivalent
@@ -34,7 +34,7 @@ func Normalize(dt dictionary.Type, s string) (string, error) {
 	trimmed := strings.TrimSpace(s)
 	var normalized string
 	switch dt {
-	case dictionary.Eiji:
+	case dictionary.Eiwa:
 		normalized = fold(nfc(trimmed))
 	case dictionary.Waei:
 		normalized = fold(nfkc(trimmed))
