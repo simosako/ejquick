@@ -7,18 +7,18 @@ import "fmt"
 type Type string
 
 const (
-	// Eiji is the English-Japanese dictionary (EIJIRO).
-	Eiji Type = "eiji"
+	// Eiwa is the English-Japanese dictionary (EIJIRO).
+	Eiwa Type = "eiwa"
 	// Waei is the Japanese-English dictionary (WAEIJI).
 	Waei Type = "waei"
 )
 
 // All lists the known dictionary types in a stable order.
-var All = []Type{Eiji, Waei}
+var All = []Type{Eiwa, Waei}
 
 // IsValid reports whether t is a known dictionary type.
 func IsValid(t Type) bool {
-	return t == Eiji || t == Waei
+	return t == Eiwa || t == Waei
 }
 
 // ParseType converts a string (for example from CLI options or config
@@ -26,7 +26,7 @@ func IsValid(t Type) bool {
 func ParseType(s string) (Type, error) {
 	t := Type(s)
 	if !IsValid(t) {
-		return "", fmt.Errorf("unknown dictionary type %q (want %q or %q)", s, Eiji, Waei)
+		return "", fmt.Errorf("unknown dictionary type %q (want %q or %q)", s, Eiwa, Waei)
 	}
 	return t, nil
 }
@@ -34,8 +34,8 @@ func ParseType(s string) (Type, error) {
 // Label returns the short status label shown in the TUI.
 func (t Type) Label() string {
 	switch t {
-	case Eiji:
-		return "EIJI"
+	case Eiwa:
+		return "EIWA"
 	case Waei:
 		return "WAEI"
 	default:
@@ -48,8 +48,8 @@ func (t Type) String() string { return string(t) }
 
 // Other returns the opposite dictionary type.
 func (t Type) Other() Type {
-	if t == Eiji {
+	if t == Eiwa {
 		return Waei
 	}
-	return Eiji
+	return Eiwa
 }

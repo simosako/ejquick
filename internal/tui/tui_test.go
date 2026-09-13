@@ -36,13 +36,13 @@ func newTestModel(t *testing.T) *Model {
 	if err := os.WriteFile(input, []byte(fixtureDict), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if _, err := builder.Run(builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: os.Stderr,
+		Type: dictionary.Eiwa, Input: input, Output: output, Progress: os.Stderr,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	repo, err := search.OpenRepository(output, dictionary.Eiji)
+	repo, err := search.OpenRepository(output, dictionary.Eiwa)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func newTestModel(t *testing.T) *Model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(dictionary.Eiji,
-		map[dictionary.Type]*search.Service{dictionary.Eiji: svc},
+	return New(dictionary.Eiwa,
+		map[dictionary.Type]*search.Service{dictionary.Eiwa: svc},
 		nil, nil)
 }
 
@@ -268,7 +268,7 @@ func TestTextInputMaintainsGraphemeCursor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New(dictionary.Eiji, nil, nil, nil)
+			m := New(dictionary.Eiwa, nil, nil, nil)
 			m.Query = tt.query
 			m.QueryCursor = tt.cursor
 			for _, text := range tt.input {
@@ -296,7 +296,7 @@ func TestTextInputMaintainsGraphemeCursor(t *testing.T) {
 }
 
 func TestBracketedPasteUsesGraphemeSafeInsertion(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Query = "eafter"
 	m.QueryCursor = 1
 
@@ -317,7 +317,7 @@ func TestBracketedPasteUsesGraphemeSafeInsertion(t *testing.T) {
 }
 
 func TestBracketedPasteCollapsesLineEndingsToSpaces(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Query = "beforeafter"
 	m.QueryCursor = 6
 
@@ -331,7 +331,7 @@ func TestBracketedPasteCollapsesLineEndingsToSpaces(t *testing.T) {
 }
 
 func TestEmptyBracketedPasteIsNoOp(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Query = "query"
 	m.QueryCursor = 2
 	m.RequestID = 4
@@ -488,7 +488,7 @@ func TestTabWithSingleDictionary(t *testing.T) {
 	if cmd != nil {
 		t.Error("tab started a search")
 	}
-	if m.Dictionary != dictionary.Eiji {
+	if m.Dictionary != dictionary.Eiwa {
 		t.Error("dictionary switched with only one available")
 	}
 	if len(m.Results) != results {
@@ -500,8 +500,8 @@ func TestTabWithSingleDictionary(t *testing.T) {
 }
 
 func TestTabSwitchesBetweenAvailableDictionariesAndClearsSearchState(t *testing.T) {
-	m := New(dictionary.Eiji, map[dictionary.Type]*search.Service{
-		dictionary.Eiji: nil,
+	m := New(dictionary.Eiwa, map[dictionary.Type]*search.Service{
+		dictionary.Eiwa: nil,
 		dictionary.Waei: nil,
 	}, nil, nil)
 	m.Query = "care"
@@ -544,7 +544,7 @@ func TestTabSwitchesBetweenAvailableDictionariesAndClearsSearchState(t *testing.
 func TestEnterAndEscapeAreNoOps(t *testing.T) {
 	for _, keyName := range []string{"enter", "esc"} {
 		t.Run(keyName, func(t *testing.T) {
-			m := New(dictionary.Eiji, nil, nil, nil)
+			m := New(dictionary.Eiwa, nil, nil, nil)
 			m.Query = "query"
 			m.QueryCursor = 2
 			m.RequestID = 4
@@ -579,7 +579,7 @@ func TestViewContainsPanesAndStatus(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
 	m = modelOf(t, next)
 	v := m.View().Content
-	for _, want := range []string{"Type to search", "EIJI", ">"} {
+	for _, want := range []string{"Type to search", "EIWA", ">"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q", want)
 		}
@@ -590,7 +590,7 @@ func TestViewContainsPanesAndStatus(t *testing.T) {
 }
 
 func TestRenderLeftRowsTruncatesWideHeadwordByDisplayWidth(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = 80
 	m.Height = 10
 	m.Results = []search.Entry{{ID: 1, Headword: strings.Repeat("界", 20), Body: "artificial"}}
@@ -649,7 +649,7 @@ func TestSmallTerminalWarningPreservesState(t *testing.T) {
 }
 
 func TestRenderRightRowsWrapsCompleteHeadwordAndResizesBody(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = 80
 	m.Height = 15
 	m.Query = "entry"
@@ -708,7 +708,7 @@ func TestRenderRightRowsWrapsCompleteHeadwordAndResizesBody(t *testing.T) {
 }
 
 func TestMinimumSizeFitsMeasuredMaximumHeadwordWidth(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = minColumns
 	m.Height = minRows
 	m.Query = "entry"
@@ -753,7 +753,7 @@ func TestEmptyQuerySkipsDatabase(t *testing.T) {
 }
 
 func TestDetailPagingUsesOneRowOverlapAndClamps(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = 80
 	m.Height = 15
 	m.Query = "entry"
@@ -801,7 +801,7 @@ func TestDetailPagingUsesOneRowOverlapAndClamps(t *testing.T) {
 }
 
 func TestDetailPagingInShortPane(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = 80
 	m.Height = 7
 	m.Query = "entry"
@@ -822,7 +822,7 @@ func TestDetailPagingInShortPane(t *testing.T) {
 }
 
 func TestDetailPagingKeepsBodyRowWhenIndicatorCannotFit(t *testing.T) {
-	m := New(dictionary.Eiji, nil, nil, nil)
+	m := New(dictionary.Eiwa, nil, nil, nil)
 	m.Width = 80
 	m.Height = 6
 	m.Query = "entry"
@@ -892,7 +892,7 @@ func TestRenderQueryRowKeepsCursorVisibleWithinWidth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New(dictionary.Eiji, nil, nil, nil)
+			m := New(dictionary.Eiwa, nil, nil, nil)
 			m.Width = 80
 			m.Query = tt.query
 			m.QueryCursor = tt.cursor
@@ -974,7 +974,7 @@ func TestSearchLoggingUsesNormalizedQuery(t *testing.T) {
 
 	t.Run("failure is one ERROR line", func(t *testing.T) {
 		m := newTestModel(t)
-		if err := m.services[dictionary.Eiji].Close(); err != nil {
+		if err := m.services[dictionary.Eiwa].Close(); err != nil {
 			t.Fatal(err)
 		}
 		path := filepath.Join(t.TempDir(), "error.log")
@@ -1009,7 +1009,7 @@ func TestSearchLoggingUsesNormalizedQuery(t *testing.T) {
 		if strings.Count(logText, " ERROR ") != 1 || strings.Contains(logText, " DEBUG ") {
 			t.Fatalf("log = %q, want one ERROR line", logText)
 		}
-		if !strings.Contains(logText, `dict=eiji request=1 query="care"`) || strings.Contains(logText, " CARE ") {
+		if !strings.Contains(logText, `dict=eiwa request=1 query="care"`) || strings.Contains(logText, " CARE ") {
 			t.Errorf("error log does not contain only the normalized query: %q", logText)
 		}
 	})
@@ -1037,7 +1037,7 @@ func TestIgnoredSearchErrorsAreNotLogged(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m := New(dictionary.Eiji, nil, nil, logger)
+			m := New(dictionary.Eiwa, nil, nil, logger)
 			m.RequestID = 2
 			m.Update(tt.msg)
 			if err := logger.Close(); err != nil {

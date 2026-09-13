@@ -7,7 +7,7 @@ import (
 	"github.com/simosako/ejquick/internal/normalize"
 )
 
-func TestNormalizeEiji(t *testing.T) {
+func TestNormalizeEiwa(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -35,9 +35,9 @@ func TestNormalizeEiji(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalize.MustNormalize(dictionary.Eiji, tt.in)
+			got := normalize.MustNormalize(dictionary.Eiwa, tt.in)
 			if got != tt.want {
-				t.Errorf("eiji normalize(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Errorf("eiwa normalize(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
@@ -82,10 +82,10 @@ func TestNormalizeUnknownType(t *testing.T) {
 }
 
 func TestEmptyAfter(t *testing.T) {
-	if !normalize.EmptyAfter(dictionary.Eiji, "  ") {
+	if !normalize.EmptyAfter(dictionary.Eiwa, "  ") {
 		t.Error("spaces only should be empty after normalization")
 	}
-	if normalize.EmptyAfter(dictionary.Eiji, "a") {
+	if normalize.EmptyAfter(dictionary.Eiwa, "a") {
 		t.Error("non-empty string reported as empty")
 	}
 	if !normalize.EmptyAfter(dictionary.Waei, "\u3000") {
@@ -93,15 +93,15 @@ func TestEmptyAfter(t *testing.T) {
 	}
 }
 
-// TestEijiWaeiAgreement checks that ASCII inputs normalize identically in
+// TestEiwaWaeiAgreement checks that ASCII inputs normalize identically in
 // both dictionaries so that dictionary switching yields consistent keys for
 // latin input.
-func TestEijiWaeiAgreement(t *testing.T) {
+func TestEiwaWaeiAgreement(t *testing.T) {
 	for _, s := range []string{"English", " TAKE CARE ", "mp3"} {
-		e := normalize.MustNormalize(dictionary.Eiji, s)
+		e := normalize.MustNormalize(dictionary.Eiwa, s)
 		w := normalize.MustNormalize(dictionary.Waei, s)
 		if e != w {
-			t.Errorf("normalization mismatch for %q: eiji=%q waei=%q", s, e, w)
+			t.Errorf("normalization mismatch for %q: eiwa=%q waei=%q", s, e, w)
 		}
 	}
 }

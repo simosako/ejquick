@@ -55,10 +55,10 @@ func TestBuildBasicDatabase(t *testing.T) {
 		"cat : a small animal",
 		"take care : be careful",
 	}))
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 
 	stats, err := runBuild(t, builder.Options{
-		Type:     dictionary.Eiji,
+		Type:     dictionary.Eiwa,
 		Input:    input,
 		Output:   output,
 		Progress: testWriter{t},
@@ -117,7 +117,7 @@ func TestBuildBasicDatabase(t *testing.T) {
 	// Metadata basics.
 	checkMeta(t, db, map[string]string{
 		"schema_version":        "1",
-		"dictionary_type":       "eiji",
+		"dictionary_type":       "eiwa",
 		"source_version":        "1-0",
 		"source_line_count":     "4",
 		"entry_count":           "4",
@@ -136,9 +136,9 @@ func TestBuildNilProgressDisablesOutput(t *testing.T) {
 	}))
 
 	stats, err := builder.Run(builder.Options{
-		Type:   dictionary.Eiji,
+		Type:   dictionary.Eiwa,
 		Input:  input,
-		Output: filepath.Join(dir, "eiji.sqlite3"),
+		Output: filepath.Join(dir, "eiwa.sqlite3"),
 	})
 	if err != nil {
 		t.Fatalf("Run with nil Progress: %v", err)
@@ -216,13 +216,13 @@ func TestBuildSkipsKeepIDGaps(t *testing.T) {
 func TestBuildOutputExistsWithoutForce(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "in.TXT", encodeCP932Lines(t, []string{"a : b"}))
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if err := os.WriteFile(output, []byte("existing"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output,
+		Type: dictionary.Eiwa, Input: input, Output: output,
 	})
 	if err == nil {
 		t.Fatal("expected error when output exists without --force")
@@ -296,7 +296,7 @@ func TestBuildRejectsInputAsOutput(t *testing.T) {
 			output := tt.outputPath(t, input)
 
 			_, err := runBuild(t, builder.Options{
-				Type: dictionary.Eiji, Input: input, Output: output, Force: tt.force,
+				Type: dictionary.Eiwa, Input: input, Output: output, Force: tt.force,
 			})
 			if err == nil || !strings.Contains(err.Error(), "same file") {
 				t.Fatalf("Run error = %v, want same-file error", err)
@@ -331,10 +331,10 @@ func TestBuildForceReplacesOutput(t *testing.T) {
 		"removed : old only",
 		"two : 2",
 	}))
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 
 	if _, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: testWriter{t},
+		Type: dictionary.Eiwa, Input: input, Output: output, Progress: testWriter{t},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestBuildForceReplacesOutput(t *testing.T) {
 		"two : second",
 	}))
 	stats, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input2, Output: output, Force: true, Progress: testWriter{t},
+		Type: dictionary.Eiwa, Input: input2, Output: output, Force: true, Progress: testWriter{t},
 	})
 	if err != nil {
 		t.Fatalf("force rebuild: %v", err)
@@ -401,11 +401,11 @@ func TestBuildFailurePreservesExistingOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			input := writeFixture(t, dir, "EIJIRO1-0.TXT", tt.data)
-			output := writeFixture(t, dir, "eiji.sqlite3", []byte("existing database"))
+			output := writeFixture(t, dir, "eiwa.sqlite3", []byte("existing database"))
 			var progress bytes.Buffer
 
 			if _, err := builder.Run(builder.Options{
-				Type: dictionary.Eiji, Input: input, Output: output, Force: true, Progress: &progress,
+				Type: dictionary.Eiwa, Input: input, Output: output, Force: true, Progress: &progress,
 			}); err == nil {
 				t.Fatal("build unexpectedly succeeded")
 			}
@@ -431,7 +431,7 @@ func TestBuildProgressHasFixedLines(t *testing.T) {
 	}))
 	var progress bytes.Buffer
 	if _, err := builder.Run(builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: filepath.Join(dir, "eiji.sqlite3"), Progress: &progress,
+		Type: dictionary.Eiwa, Input: input, Output: filepath.Join(dir, "eiwa.sqlite3"), Progress: &progress,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -484,11 +484,11 @@ func TestBuildCompactSetsMetadata(t *testing.T) {
 		"beta : b",
 		"gamma : c",
 	}))
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 
 	var progress bytes.Buffer
 	if _, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Compact: true, Progress: &progress,
+		Type: dictionary.Eiwa, Input: input, Output: output, Compact: true, Progress: &progress,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -507,10 +507,10 @@ func TestBuildDecodeErrorStops(t *testing.T) {
 	// Valid line followed by an invalid CP932 lead byte 0x80.
 	data := append([]byte("\x81\xa1ok : fine\r\n"), 0x80, '\n')
 	input := writeFixture(t, dir, "EIJIRO1-0.TXT", data)
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 
 	_, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: testWriter{t},
+		Type: dictionary.Eiwa, Input: input, Output: output, Progress: testWriter{t},
 	})
 	if err == nil {
 		t.Fatal("expected decode error")
@@ -524,12 +524,12 @@ func TestBuildDecodeErrorStops(t *testing.T) {
 func TestBuildEmptyInputFailsValidation(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFixture(t, dir, "EIJIRO1-0.TXT", []byte(""))
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 
 	// A build with zero entries cannot pass the smoke queries and must
 	// fail without publishing anything.
 	_, err := runBuild(t, builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: testWriter{t},
+		Type: dictionary.Eiwa, Input: input, Output: output, Progress: testWriter{t},
 	})
 	if err == nil {
 		t.Fatal("expected validation error for empty dictionary")

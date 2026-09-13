@@ -27,9 +27,10 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 	tests := [][]string{
 		nil,
 		{"--type", "bad", "--input", "in", "--output", "out"},
-		{"--type", "eiji", "--output", "out"},
-		{"--type", "eiji", "--input", "in"},
-		{"--type", "eiji", "--input", "in", "--output", "out", "extra"},
+		{"--type", "eiji", "--input", "in", "--output", "out"},
+		{"--type", "eiwa", "--output", "out"},
+		{"--type", "eiwa", "--input", "in"},
+		{"--type", "eiwa", "--input", "in", "--output", "out", "extra"},
 	}
 	for _, args := range tests {
 		var stdout, stderr bytes.Buffer
@@ -48,14 +49,14 @@ func TestRunRejectsInvalidArguments(t *testing.T) {
 func TestRunBuildWritesProgressOnlyToStderr(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "EIJIRO1-0.TXT")
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{
-		"--type", "eiji",
+		"--type", "eiwa",
 		"--input", input,
 		"--output", output,
 	}, &stdout, &stderr)
@@ -78,7 +79,7 @@ func TestRunBuildWritesProgressOnlyToStderr(t *testing.T) {
 func TestRunBuildFailureReturnsTwo(t *testing.T) {
 	dir := t.TempDir()
 	input := filepath.Join(dir, "input.TXT")
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func TestRunBuildFailureReturnsTwo(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"--type", "eiji", "--input", input, "--output", output}, &stdout, &stderr)
+	code := run([]string{"--type", "eiwa", "--input", input, "--output", output}, &stdout, &stderr)
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}

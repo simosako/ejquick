@@ -36,7 +36,7 @@
 このため、Linux で人工データに対して次の形を実行すると exit code 0 で成功し、元の TXT が SQLite DB に置き換わることを確認した。
 
 ```text
-ejquick-build --type eiji --input sample.TXT --output sample.TXT --force
+ejquick-build --type eiwa --input sample.TXT --output sample.TXT --force
 ```
 
 辞書 TXT は購入データであり、上書きは回復不能なデータ損失になり得る。パス文字列の単純比較だけでは、相対パス、symlink、hard link、Windows の大文字小文字差を見逃す。
@@ -120,7 +120,7 @@ command は常に `os.Stderr` を渡すものの、package 内 API の明示さ�
 
 `loadConfig` は `config.DefaultPath()` のエラーと、`os.Stat` の `not exist` 以外のエラーをすべて無視して defaults を返す。設計書 13.2、21.8 は `os.UserConfigDir()` のエラーを起動エラーにするよう明記している。
 
-`HOME` と XDG 関連変数を空にした検証では、`determine user config directory` ではなく相対的な `eiji.sqlite3` の open error まで進んだ。
+`HOME` と XDG 関連変数を空にした検証では、`determine user config directory` ではなく相対的な `eiwa.sqlite3` の open error まで進んだ。
 
 推奨変更: `DefaultPath` のエラーは返す。`os.Stat` は `os.IsNotExist` の場合だけ defaults とし、permission、`ENOTDIR`、I/O error は起動エラーにする。
 
@@ -329,7 +329,7 @@ logging section では `--debug` を説明しているが、option 一覧から�
 | 検索方式 | 1-2 runes は prefix、3 runes以上は prefix 優先 + substring 補完 |
 | 上限制御 | Service でも1から500を検証し、SQL LIMIT は bind parameter |
 | 安全な FTS query | quote escape と bind parameterを使い、SQL文字列へ入力を連結していない |
-| 正規化 | Eiji NFC + fold、Waei NFKC + fold を Builder/検索で共用 |
+| 正規化 | Eiwa NFC + fold、Waei NFKC + fold を Builder/検索で共用 |
 | 非同期 TUI | context cancellation と単調増加 request ID を併用し stale result を破棄 |
 | DB 公開 | 同一 directory の一時 DB、read-only validation、file sync、rename、directory sync |
 | Read-only 検索 | 検索 Repository は `mode=ro` で openし、write拒否 smoke test がある |

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: bench/run-real.sh --type <eiji|waei> --input <TXT> [--queries <q1|q2|q3>] [--count <n>]
+Usage: bench/run-real.sh --type <eiwa|waei> --input <TXT> [--queries <q1|q2|q3>] [--count <n>]
 
 Builds normal and compact databases under tmp/, records build resource
 usage, and runs the real-database search benchmarks. No source or database
@@ -57,8 +57,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$dict_type" != "eiji" && "$dict_type" != "waei" ]]; then
-  echo "--type must be eiji or waei" >&2
+if [[ "$dict_type" != "eiwa" && "$dict_type" != "waei" ]]; then
+  echo "--type must be eiwa or waei" >&2
   exit 2
 fi
 if [[ -z "$input" || ! -f "$input" ]]; then
@@ -70,7 +70,7 @@ if ! [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 if [[ -z "$queries" ]]; then
-  if [[ "$dict_type" == "eiji" ]]; then
+  if [[ "$dict_type" == "eiwa" ]]; then
     queries="e|en|eng"
   else
     queries="日|日本|日本語"
@@ -166,9 +166,9 @@ run_build normal
 normal_db="$last_db"
 run_build compact --compact
 
-if [[ "$dict_type" == "eiji" ]]; then
-  db_env="EJQUICK_BENCH_EIJI_DB"
-  query_env="EJQUICK_BENCH_EIJI_QUERIES"
+if [[ "$dict_type" == "eiwa" ]]; then
+  db_env="EJQUICK_BENCH_EIWA_DB"
+  query_env="EJQUICK_BENCH_EIWA_QUERIES"
 else
   db_env="EJQUICK_BENCH_WAEI_DB"
   query_env="EJQUICK_BENCH_WAEI_QUERIES"

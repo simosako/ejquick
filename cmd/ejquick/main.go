@@ -28,7 +28,7 @@ EJQuick dictionary search. With a query argument it prints the results
 and exits; without one it starts the interactive TUI.
 
 Options:
-  -d, --dictionary <eiji|waei>    dictionary to search
+  -d, --dictionary <eiwa|waei>    dictionary to search
   -c, --config <path>             config file path
       --limit <1..500>            result limit for this process
       --format <plain|jsonl>      output format (CLI search only)

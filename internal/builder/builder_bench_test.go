@@ -28,7 +28,7 @@ func BenchmarkBuild(b *testing.B) {
 			data := artificialBuilderData(bc.rows)
 			dir := b.TempDir()
 			input := filepath.Join(dir, "EIJIRO-BENCH-1-0.TXT")
-			output := filepath.Join(dir, "eiji.sqlite3")
+			output := filepath.Join(dir, "eiwa.sqlite3")
 			if err := os.WriteFile(input, data, 0o644); err != nil {
 				b.Fatal(err)
 			}
@@ -39,7 +39,7 @@ func BenchmarkBuild(b *testing.B) {
 			for b.Loop() {
 				var err error
 				stats, err = builder.Run(builder.Options{
-					Type:     dictionary.Eiji,
+					Type:     dictionary.Eiwa,
 					Input:    input,
 					Output:   output,
 					Force:    true,

@@ -23,7 +23,7 @@ type Dictionary struct {
 
 // Search holds search behavior settings.
 type Search struct {
-	// DefaultDictionary is "eiji" or "waei".
+	// DefaultDictionary is "eiwa" or "waei".
 	DefaultDictionary string `toml:"default_dictionary"`
 	// MaxResults is the result limit, 1..500.
 	MaxResults int `toml:"max_results"`
@@ -31,7 +31,7 @@ type Search struct {
 
 // Config is the whole configuration file.
 type Config struct {
-	Eiji   Dictionary `toml:"eiji"`
+	Eiwa   Dictionary `toml:"eiwa"`
 	Waei   Dictionary `toml:"waei"`
 	Search Search     `toml:"search"`
 }
@@ -42,7 +42,7 @@ type rawSearch struct {
 }
 
 type rawConfig struct {
-	Eiji   Dictionary `toml:"eiji"`
+	Eiwa   Dictionary `toml:"eiwa"`
 	Waei   Dictionary `toml:"waei"`
 	Search rawSearch  `toml:"search"`
 }
@@ -71,7 +71,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg := Config{
-		Eiji: raw.Eiji,
+		Eiwa: raw.Eiwa,
 		Waei: raw.Waei,
 		Search: Search{
 			DefaultDictionary: raw.Search.DefaultDictionary,
@@ -123,16 +123,16 @@ func (c *Config) validate() error {
 // applyDefaults fills unset values.
 func (c *Config) applyDefaults(configPath string) {
 	if c.Search.DefaultDictionary == "" {
-		c.Search.DefaultDictionary = dictionary.Eiji.String()
+		c.Search.DefaultDictionary = dictionary.Eiwa.String()
 	}
 	if c.Search.MaxResults == 0 {
 		c.Search.MaxResults = search.DefaultMaxResults
 	}
 	base := filepath.Dir(configPath)
-	if c.Eiji.Database == "" {
-		c.Eiji.Database = DefaultDatabasePath(dictionary.Eiji)
+	if c.Eiwa.Database == "" {
+		c.Eiwa.Database = DefaultDatabasePath(dictionary.Eiwa)
 	} else {
-		c.Eiji.Database = resolvePath(base, c.Eiji.Database)
+		c.Eiwa.Database = resolvePath(base, c.Eiwa.Database)
 	}
 	if c.Waei.Database == "" {
 		c.Waei.Database = DefaultDatabasePath(dictionary.Waei)
@@ -178,8 +178,8 @@ func DefaultDatabasePath(dt dictionary.Type) string {
 // Database returns the configured database path for a dictionary type.
 func (c *Config) Database(dt dictionary.Type) string {
 	switch dt {
-	case dictionary.Eiji:
-		return c.Eiji.Database
+	case dictionary.Eiwa:
+		return c.Eiwa.Database
 	case dictionary.Waei:
 		return c.Waei.Database
 	}
@@ -192,7 +192,7 @@ func (c *Config) DefaultDict() dictionary.Type {
 	dt, err := dictionary.ParseType(c.Search.DefaultDictionary)
 	if err != nil {
 		// Unreachable after validate().
-		return dictionary.Eiji
+		return dictionary.Eiwa
 	}
 	return dt
 }

@@ -15,7 +15,7 @@ import (
 
 func BenchmarkSearch(b *testing.B) {
 	path := buildArtificialBenchmarkDB(b, 20_000)
-	repo, err := search.OpenRepository(path, dictionary.Eiji)
+	repo, err := search.OpenRepository(path, dictionary.Eiwa)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func BenchmarkOpenRepository(b *testing.B) {
 	path := buildArtificialBenchmarkDB(b, 20_000)
 	b.ReportAllocs()
 	for b.Loop() {
-		repo, err := search.OpenRepository(path, dictionary.Eiji)
+		repo, err := search.OpenRepository(path, dictionary.Eiwa)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -97,9 +97,9 @@ func buildArtificialBenchmarkDB(b *testing.B, rows int) string {
 	if err := f.Close(); err != nil {
 		b.Fatal(err)
 	}
-	output := filepath.Join(dir, "eiji.sqlite3")
+	output := filepath.Join(dir, "eiwa.sqlite3")
 	if _, err := builder.Run(builder.Options{
-		Type: dictionary.Eiji, Input: input, Output: output, Progress: io.Discard,
+		Type: dictionary.Eiwa, Input: input, Output: output, Progress: io.Discard,
 	}); err != nil {
 		b.Fatal(err)
 	}
