@@ -3,24 +3,27 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/simosako/ejquick/internal/builder"
 	"github.com/simosako/ejquick/internal/buildinfo"
+	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
 )
 
-const usage = `Usage: ejquick-build [options]
+const usage = `Usage: ejquick-build [options] <input>
 
 Build an EJQuick dictionary database from a CP932 TXT file.
 
+Arguments:
+  <input>               source TXT file (required)
+
 Options:
   --type <eiwa|waei>    dictionary type (required)
-  --input <path>        source TXT file (required)
-  --output <path>       destination SQLite database (required)
+  --output <path>       destination SQLite database (default: platform data directory)
   --force               replace an existing output database
   --compact             run VACUUM to minimize the database size
   -h, --help            show this help
@@ -56,53 +59,93 @@ func run(args []string, stdout, stderr io.Writer) int {
 // parseArgs returns the options, or done=true when help or version
 // output has already been printed (the caller should exit 0).
 func parseArgs(args []string, stdout, stderr io.Writer) (*builder.Options, bool, error) {
-	fs := flag.NewFlagSet("ejquick-build", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() { fmt.Fprint(stderr, usage) }
-
 	var (
-		typeStr  = fs.String("type", "", "dictionary type: eiwa or waei")
-		input    = fs.String("input", "", "source TXT file")
-		output   = fs.String("output", "", "destination database")
-		force    = fs.Bool("force", false, "replace existing output")
-		compact  = fs.Bool("compact", false, "run VACUUM")
-		help     = fs.Bool("h", false, "show help")
-		helpLong = fs.Bool("help", false, "show help")
-		ver      = fs.Bool("v", false, "show version")
-		verLong  = fs.Bool("version", false, "show version")
+		typeStr string
+		input   string
+		output  string
+		force   bool
+		compact bool
 	)
-	if err := fs.Parse(args); err != nil {
-		return nil, false, err
-	}
-	if *help || *helpLong {
-		fmt.Fprint(stdout, usage)
-		return nil, true, nil
-	}
-	if *ver || *verLong {
-		fmt.Fprintf(stdout, "ejquick-build %s\n", buildinfo.Version)
-		return nil, true, nil
+	inputPresent := false
+	outputPresent := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			rest := args[i+1:]
+			if len(rest) > 1 || (inputPresent && len(rest) > 0) {
+				return nil, false, fmt.Errorf("expected exactly one input TXT argument")
+			}
+			if len(rest) == 1 {
+				input = rest[0]
+				inputPresent = true
+			}
+			goto done
+		case arg == "-h" || arg == "--help":
+			fmt.Fprint(stdout, usage)
+			return nil, true, nil
+		case arg == "-v" || arg == "--version":
+			fmt.Fprintf(stdout, "ejquick-build %s\n", buildinfo.Version)
+			return nil, true, nil
+		case arg == "--type":
+			value, err := nextValue(args, &i, arg)
+			if err != nil {
+				return nil, false, err
+			}
+			typeStr = value
+		case arg == "--output":
+			value, err := nextValue(args, &i, arg)
+			if err != nil {
+				return nil, false, err
+			}
+			output = value
+			outputPresent = true
+		case arg == "--force":
+			force = true
+		case arg == "--compact":
+			compact = true
+		case strings.HasPrefix(arg, "-"):
+			return nil, false, fmt.Errorf("unknown option %q", arg)
+		default:
+			if inputPresent {
+				return nil, false, fmt.Errorf("expected exactly one input TXT argument, got multiple")
+			}
+			input = arg
+			inputPresent = true
+		}
 	}
 
-	dt, err := dictionary.ParseType(*typeStr)
+done:
+	dt, err := dictionary.ParseType(typeStr)
 	if err != nil {
 		return nil, false, fmt.Errorf("--type: %w", err)
 	}
-	if *input == "" {
-		return nil, false, fmt.Errorf("--input is required")
+	if !inputPresent || input == "" {
+		return nil, false, fmt.Errorf("input TXT argument is required")
 	}
-	if *output == "" {
-		return nil, false, fmt.Errorf("--output is required")
+	if outputPresent && output == "" {
+		return nil, false, fmt.Errorf("--output must not be empty")
 	}
-	if fs.NArg() > 0 {
-		return nil, false, fmt.Errorf("unexpected arguments: %v", fs.Args())
+	if !outputPresent {
+		output = config.DefaultDatabasePath(dt)
 	}
 
 	return &builder.Options{
 		Type:     dt,
-		Input:    *input,
-		Output:   *output,
-		Force:    *force,
-		Compact:  *compact,
+		Input:    input,
+		Output:   output,
+		Force:    force,
+		Compact:  compact,
 		Progress: stderr,
 	}, false, nil
+}
+
+// nextValue consumes the value that follows a value-taking option.
+func nextValue(args []string, i *int, name string) (string, error) {
+	if *i+1 >= len(args) {
+		return "", fmt.Errorf("option %s requires a value", name)
+	}
+	*i++
+	return args[*i], nil
 }

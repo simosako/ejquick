@@ -43,7 +43,7 @@ func Run(cfg *config.Config, logger *logging.Logger) error {
 	if len(services) == 0 {
 		err := fmt.Errorf("no usable dictionary database\n%s\n%s",
 			describeUnavailable(unavailable),
-			"Create one with: ejquick-build --type <eiwa|waei> --input <TXT> --output <sqlite3>")
+			"Create one with: ejquick-build --type <eiwa|waei> <TXT>")
 		logger.Error("startup: %v", err)
 		return err
 	}
