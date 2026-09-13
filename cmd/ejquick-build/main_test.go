@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +27,107 @@ func TestRunHelpAndVersion(t *testing.T) {
 			t.Errorf("run(%v) stderr = %q", args, stderr.String())
 		}
 	}
+}
+
+func TestRunMachineProtocolBuild(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "EIJIRO1-0.TXT")
+	output := filepath.Join(dir, "eiwa.sqlite3")
+	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin, writer := io.Pipe()
+	release := make(chan struct{})
+	go func() {
+		_, _ = fmt.Fprintln(writer, `{"protocol":1,"command":"start"}`)
+		<-release
+		_ = writer.Close()
+	}()
+	var stdout, stderr bytes.Buffer
+	code := runWithIO([]string{
+		"--machine-protocol", "1", "--type", "eiwa", "--output", output, input,
+	}, stdin, &stdout, &stderr)
+	close(release)
+	if code != 0 {
+		t.Fatalf("exit code = %d; stderr = %q", code, stderr.String())
+	}
+	events := decodeProtocolEvents(t, stdout.Bytes())
+	if len(events) < 3 || events[0].Event != "ready" || events[len(events)-1].Event != "completed" {
+		t.Fatalf("events = %+v", events)
+	}
+	if events[0].Protocol != 1 || events[0].Dictionary != "eiwa" {
+		t.Errorf("ready event = %+v", events[0])
+	}
+	completed := events[len(events)-1]
+	if completed.Entries != 1 || completed.SourceLines != 1 || completed.DBSize <= 0 {
+		t.Errorf("completed event = %+v", completed)
+	}
+	terminal := 0
+	for _, event := range events {
+		if event.Event == "completed" || event.Event == "failed" || event.Event == "cancelled" {
+			terminal++
+		}
+	}
+	if terminal != 1 {
+		t.Errorf("terminal event count = %d, want 1", terminal)
+	}
+}
+
+func TestRunMachineProtocolCancel(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "EIJIRO1-0.TXT")
+	output := filepath.Join(dir, "eiwa.sqlite3")
+	if err := os.WriteFile(input, []byte("\x81\xa1alpha : first body\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdin := strings.NewReader("{\"protocol\":1,\"command\":\"start\"}\n" +
+		"{\"protocol\":1,\"command\":\"cancel\"}\n")
+	var stdout, stderr bytes.Buffer
+	code := runWithIO([]string{
+		"--machine-protocol", "1", "--type", "eiwa", "--output", output, input,
+	}, stdin, &stdout, &stderr)
+	if code != 130 {
+		t.Fatalf("exit code = %d, want 130; stderr = %q", code, stderr.String())
+	}
+	events := decodeProtocolEvents(t, stdout.Bytes())
+	if got := events[len(events)-1].Event; got != "cancelled" {
+		t.Fatalf("terminal event = %q, want cancelled", got)
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Errorf("output exists after cancel: %v", err)
+	}
+}
+
+func TestRunMachineProtocolRejectsInvalidFirstCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runWithIO([]string{
+		"--machine-protocol", "1", "--type", "eiwa", "input.TXT",
+	}, strings.NewReader("{\"protocol\":1,\"command\":\"cancel\"}\n"), &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	events := decodeProtocolEvents(t, stdout.Bytes())
+	if len(events) != 2 || events[0].Event != "ready" || events[1].Code != "protocol_error" {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func decodeProtocolEvents(t *testing.T, data []byte) []protocolEvent {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	var events []protocolEvent
+	for {
+		var event protocolEvent
+		if err := decoder.Decode(&event); err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatalf("decode event: %v; output = %q", err, data)
+		}
+		events = append(events, event)
+	}
+	return events
 }
 
 func TestRunRejectsInvalidArguments(t *testing.T) {
