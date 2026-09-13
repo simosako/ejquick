@@ -27,7 +27,7 @@
 
 ## Critical
 
-### C-1. `--input` と `--output` が同じ場合、入力 TXT を上書きする
+### C-1. 入力引数と `--output` が同じ場合、入力 TXT を上書きする
 
 該当箇所: `internal/builder/builder.go:64-75`, `internal/builder/builder.go:119-123`, `internal/builder/builder.go:400-414`
 
@@ -36,7 +36,7 @@
 このため、Linux で人工データに対して次の形を実行すると exit code 0 で成功し、元の TXT が SQLite DB に置き換わることを確認した。
 
 ```text
-ejquick-build --type eiwa --input sample.TXT --output sample.TXT --force
+ejquick-build --type eiwa --output sample.TXT --force sample.TXT
 ```
 
 辞書 TXT は購入データであり、上書きは回復不能なデータ損失になり得る。パス文字列の単純比較だけでは、相対パス、symlink、hard link、Windows の大文字小文字差を見逃す。

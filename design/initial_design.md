@@ -1101,8 +1101,7 @@ max_results = 50
 ```bash
 ejquick-build \
   --type eiwa \
-  --input EIJIRO144-10.TXT \
-  --output eiwa.sqlite3
+  EIJIRO144-10.TXT
 ```
 
 和英:
@@ -1110,14 +1109,17 @@ ejquick-build \
 ```bash
 ejquick-build \
   --type waei \
-  --input WAEIJI-144-10.TXT \
-  --output waei.sqlite3
+  WAEIJI-144-10.TXT
 ```
+
+入力TXTはちょうど1つのpositional argumentとして指定し、`--input` optionは設けない。`-` で始まる入力pathは`--`の後に指定する。
+
+`--output`を省略した場合は、検索アプリが設定省略時に使用する辞書種別ごとの既定database pathを使用する。LinuxとmacOSでは`$XDG_DATA_HOME/ejquick`、`XDG_DATA_HOME`未設定時は`$HOME/.local/share/ejquick`、Windowsでは`%LocalAppData%/ejquick`をdirectoryとする。file名は英和が`eiwa.sqlite3`、和英が`waei.sqlite3`とし、出力先directoryが存在しなければ作成する。別の出力先を使用する場合は`--output <path>`で明示する。
 
 既存DBを明示的に置換する場合のみ `--force` を指定する。
 
 ```bash
-ejquick-build --type eiwa --input EIJIRO144-10.TXT --output eiwa.sqlite3 --force
+ejquick-build --type eiwa --force EIJIRO144-10.TXT
 ```
 
 ### 14.2 変換フロー
@@ -1215,9 +1217,8 @@ PRAGMA cache_size = -131072;
 ```bash
 ejquick-build \
   --type eiwa \
-  --input EIJIRO144-10.TXT \
-  --output eiwa.sqlite3 \
-  --compact
+  --compact \
+  EIJIRO144-10.TXT
 ```
 
 `VACUUM` はentries投入transactionとindex構築を完了した後、一時DBに対してtransaction外で実行する。失敗した場合はbuild全体を失敗とし、一時DBを破棄して既存の完成DBには影響させない。
@@ -1261,13 +1262,13 @@ compacted
 
 ### 14.7 完成DBの公開
 
-Builder は `--output` へ直接書き込まず、出力先と同じdirectoryに衝突しない名前の一時DBを作成する。同じfilesystem内でのrenameを利用できるよう、systemの一時directoryは使用しない。
+Builder は完成DBの出力先へ直接書き込まず、出力先と同じdirectoryに衝突しない名前の一時DBを作成する。同じfilesystem内でのrenameを利用できるよう、systemの一時directoryは使用しない。
 
 optional `VACUUM`、`ANALYZE`、`PRAGMA optimize`を含むすべての構築処理を完了した後、DBをcloseし、一時DBをread-onlyで開き直してschema、metadata、`compacted`、件数、検索smoke testを検査する。検査に成功した一時DBだけを完成DBとして公開する。
 
 公開前に一時DB fileを明示的に同期する。renameまたはreplace後は、OSが対応する場合に出力先directoryも同期し、電源断後に完成DBのdirectory entryが失われる可能性を抑える。
 
-`--output` がすでに存在し、`--force` が指定されていない場合は、既存DBを変更せずエラー終了する。`--force` が指定された場合はOSごとの原子的な置換機能を使用し、既存DBを削除してからrenameする実装にはしない。置換処理に失敗した場合は既存DBを維持し、エラー終了する。
+出力先がすでに存在し、`--force` が指定されていない場合は、既存DBを変更せずエラー終了する。`--force` が指定された場合はOSごとの原子的な置換機能を使用し、既存DBを削除してからrenameする実装にはしない。置換処理に失敗した場合は既存DBを維持し、エラー終了する。
 
 Windowsでは検索アプリなどが既存DBを開いていると置換に失敗する可能性がある。その場合は既存DBを維持したまま、使用中のアプリケーションを閉じて再実行するよう表示する。
 

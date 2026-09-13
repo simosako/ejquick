@@ -37,10 +37,13 @@ go build -ldflags "-X github.com/simosako/ejquick/internal/buildinfo.Version=$VE
 1. Build a dictionary database from a purchased TXT file (CP932 encoded):
 
 ```bash
-ejquick-build --type eiwa --input EIJIRO144-10.TXT --output ~/.local/share/ejquick/eiwa.sqlite3
-ejquick-build --type waei --input WAEIJI-144-10.TXT --output ~/.local/share/ejquick/waei.sqlite3
+ejquick-build --type eiwa EIJIRO144-10.TXT
+ejquick-build --type waei WAEIJI-144-10.TXT
 ```
 
+By default, databases are written as `eiwa.sqlite3` or `waei.sqlite3` in
+the platform data directory under `ejquick/`; missing directories are
+created automatically. Use `--output <path>` to choose another location.
 Progress goes to stderr; the database is built in a temporary file,
 validated read-only, and only then published atomically. `--force`
 replaces an existing database; `--compact` additionally runs `VACUUM` for

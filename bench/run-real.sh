@@ -118,7 +118,7 @@ run_build() {
   mkdir -p "$db_dir"
 
   "${time_command[@]}" "$builder_bin" \
-    --type "$dict_type" --input "$input" --output "$output" "$@" \
+    --type "$dict_type" --output "$output" "$@" -- "$input" \
     >"$stdout_file" 2>"$metrics_file" &
   local pid=$!
   while kill -0 "$pid" 2>/dev/null; do
