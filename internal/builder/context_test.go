@@ -35,10 +35,14 @@ func TestRunContextReportsTypedEvents(t *testing.T) {
 	if last.Kind != builder.EventCompleted || last.Stats.Entries != stats.Entries {
 		t.Fatalf("last event = %+v, want completed stats", last)
 	}
+	canonicalDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("resolve test directory: %v", err)
+	}
 	for _, event := range events {
 		if event.Kind == builder.EventTemporaryCreated {
-			if filepath.Dir(event.TemporaryPath) != dir {
-				t.Errorf("temporary directory = %q, want %q", filepath.Dir(event.TemporaryPath), dir)
+			if filepath.Dir(event.TemporaryPath) != canonicalDir {
+				t.Errorf("temporary directory = %q, want %q", filepath.Dir(event.TemporaryPath), canonicalDir)
 			}
 			if _, err := os.Stat(event.TemporaryPath); !os.IsNotExist(err) {
 				t.Errorf("temporary path remains after success: %v", err)

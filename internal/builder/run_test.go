@@ -53,8 +53,9 @@ func TestRunPublishFailurePreservesExistingOutput(t *testing.T) {
 		Type: dictionary.Eiwa, Input: input, Output: output, Force: true, Progress: io.Discard,
 	}, func(tmpPath, gotOutput string) error {
 		publishCalled = true
-		if gotOutput != output {
-			t.Errorf("publish output = %q, want %q", gotOutput, output)
+		wantOutput := canonicalTestPath(t, output)
+		if gotOutput != wantOutput {
+			t.Errorf("publish output = %q, want %q", gotOutput, wantOutput)
 		}
 		if _, err := os.Stat(tmpPath); err != nil {
 			t.Errorf("temporary database unavailable at publish: %v", err)
@@ -87,6 +88,19 @@ func TestPhaseReportsFailure(t *testing.T) {
 	if progress.String() != want {
 		t.Errorf("progress = %q, want %q", progress.String(), want)
 	}
+}
+
+func canonicalTestPath(t *testing.T, path string) string {
+	t.Helper()
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatalf("resolve test path: %v", err)
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(abs))
+	if err != nil {
+		t.Fatalf("resolve test parent: %v", err)
+	}
+	return filepath.Join(parent, filepath.Base(abs))
 }
 
 func assertNoBuildTemps(t *testing.T, dir string) {
