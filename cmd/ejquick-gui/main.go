@@ -11,7 +11,6 @@ import (
 	"os"
 
 	"github.com/simosako/ejquick/internal/buildinfo"
-	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/gui"
 	"github.com/simosako/ejquick/internal/logging"
 )
@@ -40,34 +39,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	logger := logging.Open(opts.Debug)
 	defer logger.Close()
 
-	cfg, err := loadConfig(opts.ConfigPath, opts.ConfigPathSet)
-	if err != nil {
-		// M1 interim behavior: report the failure on stderr and exit 2.
-		// The startup dialog of design D46 replaces this in the next
-		// milestone.
-		logger.Error("startup: %v", err)
-		fmt.Fprintf(stderr, "ejquick-gui: %v\n", err)
-		return 2
-	}
-
-	return gui.Run(cfg, logger)
-}
-
-// loadConfig has the same semantics as the ejquick CLI: an explicit
-// --config file must exist and be readable, while a missing default
-// config file means all defaults apply.
-func loadConfig(path string, explicit bool) (*config.Config, error) {
-	if explicit {
-		return config.Load(path)
-	}
-	defaultPath, err := config.DefaultPath()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(defaultPath); err == nil {
-		return config.Load(defaultPath)
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("stat default config %s: %w", defaultPath, err)
-	}
-	return config.Defaults(), nil
+	// gui.Run loads the configuration itself so config failures can be
+	// recovered through the in-process startup dialog (design D39/D46).
+	return gui.Run(*opts, logger)
 }

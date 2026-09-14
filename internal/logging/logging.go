@@ -22,6 +22,7 @@ type Logger struct {
 	mu       sync.Mutex
 	w        io.Writer
 	file     *os.File
+	path     string
 	stderr   io.Writer
 	warnOnce sync.Once
 	debug    bool
@@ -29,6 +30,21 @@ type Logger struct {
 
 // Nop returns a logger that discards everything.
 func Nop() *Logger { return &Logger{w: io.Discard} }
+
+// Path returns the log file path actually opened, if any. ok is false
+// for discarding loggers (missing state directory, unwritable file, or
+// Nop), which lets the GUI disable its "Open Log" action (design D24).
+func (l *Logger) Path() (path string, ok bool) {
+	if l == nil {
+		return "", false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file == nil {
+		return "", false
+	}
+	return l.path, true
+}
 
 // DefaultPath returns the platform-conventional log file path:
 //
@@ -80,7 +96,7 @@ func Open(debug bool) *Logger {
 		warnNoLog(err)
 		return Nop()
 	}
-	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}
+	return &Logger{w: f, file: f, path: path, stderr: os.Stderr, debug: debug}
 }
 
 // OpenFile returns a logger appending to an explicit file path, creating
@@ -93,7 +109,7 @@ func OpenFile(path string, debug bool) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Logger{w: f, file: f, stderr: os.Stderr, debug: debug}, nil
+	return &Logger{w: f, file: f, path: path, stderr: os.Stderr, debug: debug}, nil
 }
 
 // Close releases the underlying file, if any.

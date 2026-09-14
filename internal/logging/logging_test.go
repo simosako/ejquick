@@ -75,3 +75,27 @@ func TestNopIsSafe(t *testing.T) {
 	}
 	logging.Nop().Error("z")
 }
+
+// TestLoggerPathReportsOpenFile verifies the D24 API used by the GUI's
+// Open Log action.
+func TestLoggerPathReportsOpenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ejquick.log")
+	logger, err := logging.OpenFile(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := logger.Path(); !ok || got != path {
+		t.Errorf("Path() = %q ok=%v, want %q true", got, ok, path)
+	}
+	logger.Close()
+	if _, ok := logger.Path(); ok {
+		t.Error("Path() ok after Close")
+	}
+	if _, ok := logging.Nop().Path(); ok {
+		t.Error("Nop().Path() ok")
+	}
+	var nilLogger *logging.Logger
+	if _, ok := nilLogger.Path(); ok {
+		t.Error("nil Path() ok")
+	}
+}

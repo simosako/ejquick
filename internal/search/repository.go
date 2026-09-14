@@ -7,6 +7,7 @@ package search
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -37,14 +38,23 @@ type Repository struct {
 
 // OpenRepository opens the database at path read-only and verifies that it
 // was produced for the given dictionary type with a compatible schema.
+//
+// Failures are returned as *OpenError so frontends can classify the cause
+// (GUI design D44/D45) while the human-readable message — and therefore
+// the CLI output and exit codes — stay exactly as before.
 func OpenRepository(path string, dt dictionary.Type) (*Repository, error) {
 	db, err := sqlite.OpenReadOnly(path)
 	if err != nil {
-		return nil, err
+		return nil, &OpenError{category: classifyOpenFailure(path, err), err: err}
 	}
 	if err := verifySchema(db, dt); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("%s (%s): %w", path, dt, err)
+		category := OpenUnknown
+		var ve *verifyError
+		if errors.As(err, &ve) {
+			category = ve.category
+		}
+		return nil, &OpenError{category: category, err: fmt.Errorf("%s (%s): %w", path, dt, err)}
 	}
 	return &Repository{db: db, dt: dt}, nil
 }
@@ -56,14 +66,16 @@ func (r *Repository) Close() error { return r.db.Close() }
 func (r *Repository) Dictionary() dictionary.Type { return r.dt }
 
 // verifySchema checks the startup invariants from the design: required
-// tables and indexes, metadata versions, and a read-only FTS query.
+// tables and indexes, metadata versions, and a read-only FTS query. Every
+// failure is a *verifyError carrying its OpenCategory; the messages are
+// unchanged from the original implementation.
 func verifySchema(db *sql.DB, dt dictionary.Type) error {
 	for _, table := range []string{"entries", "entries_fts", "metadata"} {
 		var name string
 		if err := db.QueryRow(
 			"SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
 			table).Scan(&name); err != nil {
-			return fmt.Errorf("missing table %s: %w", table, err)
+			return classifyVerifyQueryError(err, "missing table %s: %w", table, err)
 		}
 	}
 	var indexName string
@@ -71,49 +83,58 @@ func verifySchema(db *sql.DB, dt dictionary.Type) error {
 		`SELECT name FROM sqlite_master
 		 WHERE type = 'index' AND tbl_name = 'entries' AND name = ?`,
 		"idx_entries_headword_norm").Scan(&indexName); err != nil {
-		return fmt.Errorf("missing index idx_entries_headword_norm: %w", err)
+		return classifyVerifyQueryError(err, "missing index idx_entries_headword_norm: %w", err)
 	}
 	var indexColumn string
 	if err := db.QueryRow(
 		"SELECT name FROM pragma_index_info(?) WHERE seqno = 0",
 		indexName).Scan(&indexColumn); err != nil {
-		return fmt.Errorf("inspect index idx_entries_headword_norm: %w", err)
+		return classifyVerifyQueryError(err, "inspect index idx_entries_headword_norm: %w", err)
 	}
 	if indexColumn != "headword_norm" {
-		return fmt.Errorf("index idx_entries_headword_norm starts with %q, want headword_norm", indexColumn)
-	}
-	want := map[string]string{
-		"schema_version":        dbformat.SchemaVersion,
-		"dictionary_type":       dt.String(),
-		"normalization_version": normalize.Version,
-		"fts_version":           dbformat.FTSVersion,
+		return incompatiblef("index idx_entries_headword_norm starts with %q, want headword_norm", indexColumn)
 	}
 	rows, err := db.Query("SELECT key, value FROM metadata")
 	if err != nil {
-		return err
+		return classifyVerifyQueryError(err, "%w", err)
 	}
 	defer rows.Close()
 	got := map[string]string{}
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err != nil {
-			return err
+			return classifyVerifyQueryError(err, "%w", err)
 		}
 		got[k] = v
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return classifyVerifyQueryError(err, "%w", err)
+	}
+	// The dictionary type is checked first so a swapped database reports
+	// wrong_dictionary even when other metadata also mismatches (GUI
+	// design D45). A missing dictionary_type row stays incompatible: the
+	// file was not produced by a compatible EJQuick build.
+	if gotType, ok := got["dictionary_type"]; ok && gotType != dt.String() {
+		return &verifyError{
+			category: OpenWrongDictionary,
+			err:      fmt.Errorf("metadata dictionary_type = %q, want %q (rebuild the database)", gotType, dt.String()),
+		}
+	}
+	want := map[string]string{
+		"schema_version":        dbformat.SchemaVersion,
+		"normalization_version": normalize.Version,
+		"fts_version":           dbformat.FTSVersion,
 	}
 	for k, w := range want {
 		if got[k] != w {
-			return fmt.Errorf("metadata %s = %q, want %q (rebuild the database)", k, got[k], w)
+			return incompatiblef("metadata %s = %q, want %q (rebuild the database)", k, got[k], w)
 		}
 	}
 	var ftsCount int64
 	if err := db.QueryRow(
 		"SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?",
 		`"ejquick-startup-smoke"`).Scan(&ftsCount); err != nil {
-		return fmt.Errorf("fts smoke query: %w", err)
+		return classifyVerifyQueryError(err, "fts smoke query: %w", err)
 	}
 	return nil
 }

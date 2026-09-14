@@ -138,6 +138,22 @@ make release-check
 `make release-check` requires GoReleaser v2.18.0 or later. It runs a local
 snapshot and does not publish anything.
 
+### GUI (under development)
+
+The Qt 6 Widgets desktop frontend (`ejquick-gui`, design in
+[`design/gui_design.md`](design/gui_design.md)) is built behind the `gui`
+build tag so every target above stays pure Go and Qt-free (design D35).
+Building or testing it additionally requires CGO, a C++ compiler,
+`pkg-config`, and Qt 6 development packages (baseline: Qt 6.11.2,
+MIQT v0.14.0):
+
+```bash
+make build-gui   # tmp/ejquick-gui
+make test-gui    # widget tests run on the offscreen platform
+make vet-gui
+```
+
+
 See [`bench/README.md`](bench/README.md) for reproducible real-data
 measurements. The helper only reads the purchased TXT path supplied to it;
 all generated SQLite databases and reports stay under the ignored `tmp/`
