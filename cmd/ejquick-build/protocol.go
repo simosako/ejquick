@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/simosako/ejquick/internal/buildprotocol"
 )
 
-const maxProtocolLine = 64 * 1024
+const maxProtocolLine = buildprotocol.MaxLineBytes
 
 type commandReader struct {
 	reader *bufio.Reader

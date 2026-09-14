@@ -14,6 +14,7 @@ import (
 
 	"github.com/simosako/ejquick/internal/builder"
 	"github.com/simosako/ejquick/internal/buildinfo"
+	"github.com/simosako/ejquick/internal/buildprotocol"
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
 )
@@ -175,29 +176,10 @@ done:
 	}, false, nil
 }
 
-const machineProtocolVersion = 1
+const machineProtocolVersion = buildprotocol.Version
 
-type protocolCommand struct {
-	Protocol int    `json:"protocol"`
-	Command  string `json:"command"`
-}
-
-type protocolEvent struct {
-	Protocol       int    `json:"protocol"`
-	Event          string `json:"event"`
-	ProductVersion string `json:"product_version,omitempty"`
-	Dictionary     string `json:"dictionary,omitempty"`
-	Phase          string `json:"phase,omitempty"`
-	State          string `json:"state,omitempty"`
-	Lines          int64  `json:"lines,omitempty"`
-	Entries        int64  `json:"entries,omitempty"`
-	Skipped        int64  `json:"skipped,omitempty"`
-	Path           string `json:"path,omitempty"`
-	SourceLines    int64  `json:"source_lines,omitempty"`
-	DBSize         int64  `json:"db_size,omitempty"`
-	ElapsedMS      int64  `json:"elapsed_ms,omitempty"`
-	Code           string `json:"code,omitempty"`
-}
+type protocolCommand = buildprotocol.Command
+type protocolEvent = buildprotocol.Event
 
 func runMachine(stdin io.Reader, stdout, stderr io.Writer, opts *commandOptions) int {
 	encoder := json.NewEncoder(stdout)
