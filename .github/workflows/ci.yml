@@ -106,7 +106,7 @@ jobs:
           version: 6.11.2
           host: linux
           target: desktop
-          arch: gcc_64
+          arch: linux_gcc_64
           dir: ${{ runner.temp }}/qt
           modules: qtwaylandcompositor
           install-deps: true
