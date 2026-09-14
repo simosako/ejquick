@@ -1,7 +1,7 @@
 # EJQuick GUI 初期設計書
 
 > Status: Draft  
-> 最終更新: 2026-09-13  
+> 最終更新: 2026-09-14  
 > 対象: EJQuick のデスクトップ GUI フロントエンド
 
 ---
@@ -3236,6 +3236,63 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 - Widget testは100%相当で実行し、200% scalingでの起動・layout崩れはD36の実環境smoke testで確認する。
 - Fractional scaling（125% / 150%）の見た目はQt / compositorの処理に委ね、独自の補正を入れない。
 
+### D51. 起動時のXDG desktop portal host登録
+
+**状態: 決定済み（2026-09-14）**  
+**決定: A. `QT_NO_XDG_DESKTOP_PORTAL=1`でQtのportal servicesを無効化する**
+
+Qt 6.11.2のUnix services plugin（`QDesktopUnixServices`）は、`QApplication`生成時に`QGuiApplication::desktopFileName`を`org.freedesktop.host.portal.Registry.Register`でportalへ登録し、portal呼び出しの帰属先として利用できるようにする。
+一方、xdg-desktop-portal 1.20以降の`Register`は、同一D-Bus接続で1回だけ呼べること、および他のportal method呼び出しより前に行う必要があることを仕様として要求し、呼び出し元の接続はportal method呼び出し時に接続単位でcacheされる。
+この組み合わせでは、Qtの登録処理が先行するportal呼び出しやdesktop entry未installと衝突して失敗し、Qtはその失敗を`qt.qpa.services`warningとしてstderrへ出力する。
+
+開発環境（Arch Linux / Hyprland、Qt 6.11.2、xdg-desktop-portal 1.22.1、MIQT v0.14.0）での確認結果は次のとおりである。
+
+- `ejquick-gui`のconfig無し起動で、`qt.qpa.services: Failed to register with host portal ... Could not register app ID: Connection already associated with an application ID`が出力された。
+- 同種の警告は、app IDに対応するdesktop entryが見つからない場合は`Could not register app ID: App info not found for '<app-id>'`として現れる。
+- Window表示、event loop、通常終了への影響はない。登録成功時の出力はdebug levelのため通常表示されない。CopyQ #3631など複数のQt applicationで同様の警告が報告され、動作への影響は報告されていない。
+
+EJQuick GUIにとってportal servicesは不要である。D24の`QDesktopServices`による外部openのportal経路は、Qtの`checkNeedPortalSupport()`（`/.flatpak-info`の存在または`SNAP`環境変数の設定）を満たす場合だけ選択され、非sandbox環境では使われない。GUI自身も直接portal methodを呼ばない。
+したがって登録の成否はEJQuickの動作に影響せず、警告は機能的意味を持たない起動時noiseである。
+
+#### A. `QT_NO_XDG_DESKTOP_PORTAL=1`でportal servicesを無効化する（採用）
+
+- `QApplication`生成前に`QT_NO_XDG_DESKTOP_PORTAL`が空の場合だけ`1`を設定し、Qtのportal services（host登録、screenshot version確認、portal restart監視）をまとめて無効化する。
+- Qtが公式に備えるopt-out変数であり、Qt実装の内部挙動への個別workaroundを避けられる。
+- 利用者が明示的に値（`0`を含む）を設定した場合はそれを尊重し、EJQuickは上書きしない。
+- `QGuiApplication::setDesktopFileName("io.github.simosako.ejquick")`相当とorganization / application metadataは引き続き設定する。Wayland application ID（D30）と`QSettings`配置（D16）はportal servicesとは独立に必要である。
+- 警告が確実に消え、起動ごとの不要なDBus呼び出しとservice watcherもなくなる。
+- 将来portal連携（portal file dialog、global shortcut等）を採用する場合は本決定を見直す必要がある。
+
+#### B. 警告を無視して何も設定しない
+
+- Code変更が不要で、Qt / portal側の将来的な修正に任せられる。
+- 非sandbox環境ではportal services自体が不要なため、起動ごとの無意味なDBus呼び出しとstderr warningが残る。
+- 利用者からbug reportとして繰り返し報告される可能性が高い。
+
+#### C. `QLoggingCategory`のfilter rulesで`qt.qpa.services`warningだけを抑制
+
+- portal servicesは有効なままのため、将来portal連携を追加する場合の変更が小さい。
+- 登録失敗そのものは解決せず、同categoryの他の診断warningも一緒に消える。
+- Filter rulesはlog category名に依存し、category名の変更で静かに効かなくなる。
+
+#### D. D30のdesktop entryを先にinstallして登録を成功させる
+
+- Portalへ正しいapplication IDを登録でき、portal利用時の帰属が正しくなる。
+- `App info not found`型の失敗は減らせるが、接続単位のcacheによる`Connection already associated ...`は環境によって残る。
+- D30の登録scriptは将来milestoneの成果物であり、警告の解消をその実装に依存させるのは順序として早い。
+
+機能変化なしに警告を根絶でき、Qt公式のopt-out経路を使うためAを採用した。
+Portal連携を採用する時点で、D30の実装状況と合わせて本決定を再評価する。
+
+実装規則:
+
+- `internal/gui`の`Run`は`QApplication`生成前に`skipPortalServices()`を呼ぶ。`skipPortalServices`は`QT_NO_XDG_DESKTOP_PORTAL`が空の場合だけ`1`を設定し、明示的な値は上書きしない。
+- Organization name、application name、application version、desktop file nameのstatic setterは、Qt文書どおり`QApplication`生成前に呼ぶ。
+- 本変数はplatform / input methodの選択には関与しない。D26どおり、EJQuickは`QT_QPA_PLATFORM`、`QT_IM_MODULE`、`QT_PLUGIN_PATH`には一切触れない。
+- `QT_NO_XDG_DESKTOP_PORTAL`の効果はQt実装の`QDesktopUnixServices`に依存するため、Qt baseline更新時（D7）には起動時warningの有無をsmoke testで再確認する。
+- 未設定時に`1`が設定されることと、利用者の明示的な値を上書きしないことをunit testで検証する。
+- Portal連携機能の採用時は、D30のdesktop entry installと合わせて本決定を見直し、本変数を設定しない構成への復帰を検討する。
+
 ---
 
 ## 10. 推奨する決定順序
@@ -3293,6 +3350,7 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 49. D48: Builder runtime errorのcategory別message + Setup復帰 / Open Log
 50. D49: Qt / desktop既定fontへ完全に任せる
 51. D50: Qt 6の既定scalingへ完全に任せる
+52. D51: `QT_NO_XDG_DESKTOP_PORTAL=1`でQtのportal servicesを無効化
 
 整合確認:
 
@@ -3302,6 +3360,7 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 - D3概念図の日本語labelとstatus row、推奨マーカー残置、各前文の「後で決定」記述等の古い記述
 - 両辞書unavailable時のcombo / Dictionary menu disabled、成功後DB openのtiming統一等の小さなgap
 - D47の内部分類closed setは簡素化のため削除し、wrapped errorをそのまま記録する方針へ変更
+- 2026-09-14にD51を追加。Qt 6.11の起動時portal host登録warningへの対処であり、D24 / D26 / D30との整合はD51内に明記した。
 
 次の決定順序:
 
@@ -3314,7 +3373,7 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 
 ## 11. 参照資料
 
-すべて 2026-09-13 閲覧。
+すべて 2026-09-13 閲覧。ただし、末尾のD51関連資料は2026-09-14閲覧。
 
 - [Qt 6.11 Supported Platforms](https://doc.qt.io/qt-6/supported-platforms.html)
 - [Qt for Linux](https://doc.qt.io/qt-6/linux.html)
@@ -3329,4 +3388,7 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 - [Fcitx5 Qt](https://github.com/fcitx/fcitx5-qt)
 - [MIQT](https://github.com/mappu/miqt)
 - [MIQT v0.14.0 mainthread helper](https://github.com/mappu/miqt/tree/v0.14.0/qt6/mainthread)
+- [Qt Base qdesktopunixservices.cpp](https://code.qt.io/cgit/qt/qtbase.git/tree/src/gui/platform/unix/qdesktopunixservices.cpp?h=6.11.2)
+- [XDG Desktop Portal Registry (org.freedesktop.host.portal.Registry)](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.host.portal.Registry.html)
+- [flatpak/xdg-desktop-portal#1612 — Host App registry: Reregister is problematic as a toolkit](https://github.com/flatpak/xdg-desktop-portal/issues/1612)
 - [Freedesktop Icon Naming Specification](https://specifications.freedesktop.org/icon-naming-spec/latest/)
