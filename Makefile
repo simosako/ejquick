@@ -15,6 +15,7 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick-build ./cmd/ejquick-build
 
 build-gui:
+	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick-build ./cmd/ejquick-build
 	$(GUI_ENV) go build -tags gui -ldflags "$(LDFLAGS)" -o tmp/ejquick-gui ./cmd/ejquick-gui
 
 test:

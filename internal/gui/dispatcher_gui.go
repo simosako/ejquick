@@ -6,8 +6,6 @@ import (
 	"sync"
 
 	"github.com/mappu/miqt/qt6/mainthread"
-
-	"github.com/simosako/ejquick/internal/gui/controller"
 )
 
 type qtDispatcher struct {
@@ -15,7 +13,6 @@ type qtDispatcher struct {
 	cond      *sync.Cond
 	accepting bool
 	pending   int
-	handler   func(controller.Event)
 	onPanic   func(any)
 }
 
@@ -25,13 +22,7 @@ func newQtDispatcher(onPanic func(any)) *qtDispatcher {
 	return dispatcher
 }
 
-func (d *qtDispatcher) setHandler(handler func(controller.Event)) {
-	d.mu.Lock()
-	d.handler = handler
-	d.mu.Unlock()
-}
-
-func (d *qtDispatcher) Post(event controller.Event) (accepted bool) {
+func (d *qtDispatcher) post(callback func()) (accepted bool) {
 	d.mu.Lock()
 	if !d.accepting {
 		d.mu.Unlock()
@@ -59,11 +50,8 @@ func (d *qtDispatcher) Post(event controller.Event) (accepted bool) {
 		if !mainthread.IsCurrent() {
 			panic("GUI event dispatched outside Qt main thread")
 		}
-		d.mu.Lock()
-		handler := d.handler
-		d.mu.Unlock()
-		if handler != nil {
-			handler(event)
+		if callback != nil {
+			callback()
 		}
 	})
 	started = true

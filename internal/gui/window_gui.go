@@ -13,6 +13,7 @@ import (
 	"github.com/simosako/ejquick/internal/buildinfo"
 	"github.com/simosako/ejquick/internal/config"
 	"github.com/simosako/ejquick/internal/dictionary"
+	"github.com/simosako/ejquick/internal/gui/buildprocess"
 	"github.com/simosako/ejquick/internal/gui/controller"
 	"github.com/simosako/ejquick/internal/gui/startup"
 	"github.com/simosako/ejquick/internal/logging"
@@ -22,21 +23,23 @@ import (
 const settingsVersion = 1
 
 type mainWindow struct {
-	main       *qt.QMainWindow
-	central    *qt.QWidget
-	combo      *qt.QComboBox
-	comboModel *qt.QStandardItemModel
-	query      *qt.QLineEdit
-	count      *qt.QLabel
-	list       *qt.QListView
-	listModel  *qt.QStringListModel
-	splitter   *qt.QSplitter
-	stack      *qt.QStackedWidget
-	detailPage *qt.QWidget
-	headword   *qt.QLabel
-	body       *qt.QPlainTextEdit
-	message    *qt.QLabel
-	messageLog *qt.QPushButton
+	main                   *qt.QMainWindow
+	central                *qt.QWidget
+	combo                  *qt.QComboBox
+	comboModel             *qt.QStandardItemModel
+	query                  *qt.QLineEdit
+	count                  *qt.QLabel
+	list                   *qt.QListView
+	listModel              *qt.QStringListModel
+	splitter               *qt.QSplitter
+	stack                  *qt.QStackedWidget
+	detailPage             *qt.QWidget
+	headword               *qt.QLabel
+	body                   *qt.QPlainTextEdit
+	message                *qt.QLabel
+	messageBuild           *qt.QPushButton
+	messageLog             *qt.QPushButton
+	messageBuildDictionary dictionary.Type
 
 	buildAction      *qt.QAction
 	quitAction       *qt.QAction
@@ -48,24 +51,34 @@ type mainWindow struct {
 
 	controller *controller.Controller
 	dispatcher *qtDispatcher
+	config     *config.Config
 	databases  *startup.Databases
 	logger     *logging.Logger
 	settings   *qt.QSettings
 	icon       *qt.QIcon
 
-	preedit      bool
-	syncing      bool
-	shutdownOnce sync.Once
+	preedit       bool
+	syncing       bool
+	shuttingDown  bool
+	builderDialog *builderDialog
+	buildMu       sync.Mutex
+	buildProcess  *buildprocess.Process
+	buildWorkers  sync.WaitGroup
+	shutdownOnce  sync.Once
 }
 
 func newMainWindow(cfg *config.Config, databases *startup.Databases, logger *logging.Logger, icon *qt.QIcon) *mainWindow {
 	w := &mainWindow{
 		main:             qt.NewQMainWindow2(),
+		config:           cfg,
 		databases:        databases,
 		logger:           logger,
 		icon:             icon,
 		dictionaryAction: make(map[dictionary.Type]*qt.QAction, len(dictionary.All)),
 	}
+	w.dispatcher = newQtDispatcher(func(recovered any) {
+		w.handleCallbackPanic(recovered)
+	})
 	w.main.SetWindowTitle(productName)
 	w.main.SetMinimumSize2(720, 480)
 	if icon != nil && !icon.IsNull() {
@@ -176,6 +189,8 @@ func (w *mainWindow) createContent() {
 	w.message.SetTextInteractionFlags(qt.TextSelectableByMouse | qt.TextSelectableByKeyboard)
 	w.message.SetAccessibleName("Status")
 	messageLayout.AddWidget(w.message.QWidget)
+	w.messageBuild = qt.NewQPushButton5("&Build Dictionary Database...", messagePage)
+	messageLayout.AddWidget3(w.messageBuild.QWidget, 0, qt.AlignHCenter)
 	w.messageLog = qt.NewQPushButton5("Open &Log", messagePage)
 	messageLayout.AddWidget3(w.messageLog.QWidget, 0, qt.AlignHCenter)
 	messageLayout.AddStretch()
@@ -186,6 +201,7 @@ func (w *mainWindow) createContent() {
 }
 
 func (w *mainWindow) configureController(cfg *config.Config) {
+	w.controller = nil
 	if len(w.databases.Services) == 0 {
 		return
 	}
@@ -193,18 +209,17 @@ func (w *mainWindow) configureController(cfg *config.Config) {
 	for dict, service := range w.databases.Services {
 		services[dict] = service
 	}
-	w.dispatcher = newQtDispatcher(func(recovered any) {
-		w.handleCallbackPanic(recovered)
+	var next *controller.Controller
+	dispatch := controller.DispatchFunc(func(event controller.Event) bool {
+		return w.dispatcher.post(func() { w.applySearchEvent(next, event) })
 	})
-	w.controller = controller.New(w.databases.Initial, services, cfg.Search.MaxResults, w.dispatcher)
-	w.dispatcher.setHandler(w.applySearchEvent)
+	next = controller.New(w.databases.Initial, services, cfg.Search.MaxResults, dispatch)
+	w.controller = next
 }
 
 func (w *mainWindow) createActions() {
 	parent := w.main.QObject
 	w.buildAction = qt.NewQAction5("&Build Dictionary Database...", parent)
-	// The process supervisor is added in the next implementation stage.
-	w.buildAction.SetEnabled(false)
 
 	w.quitAction = qt.NewQAction5("&Quit", parent)
 	w.quitAction.SetMenuRole(qt.QAction__QuitRole)
@@ -272,6 +287,7 @@ func (w *mainWindow) createMenus() {
 }
 
 func (w *mainWindow) connectSignals() {
+	w.buildAction.OnTriggered(w.safeCallback(func() { w.showBuilder(w.currentDictionary()) }))
 	w.quitAction.OnTriggered(w.safeCallback(func() { w.beginShutdown(0) }))
 	w.copyAction.OnTriggered(w.safeCallback(w.copyEntireEntry))
 	w.focusAction.OnTriggered(w.safeCallback(func() {
@@ -287,6 +303,7 @@ func (w *mainWindow) connectSignals() {
 		}
 	}))
 	w.openLogAction.OnTriggered(w.safeCallback(w.openLog))
+	w.messageBuild.OnClicked(w.safeCallback(func() { w.showBuilder(w.messageBuildDictionary) }))
 	w.messageLog.OnClicked(w.safeCallback(func() { w.openLogAction.Trigger() }))
 	w.body.OnCustomContextMenuRequested(func(position *qt.QPoint) {
 		defer w.recoverCallback()
@@ -383,11 +400,11 @@ func (w *mainWindow) queryEdited(text string) {
 	}
 }
 
-func (w *mainWindow) applySearchEvent(event controller.Event) {
-	if w.controller == nil || !w.controller.Apply(event) {
+func (w *mainWindow) applySearchEvent(source *controller.Controller, event controller.Event) {
+	if w.controller != source || source == nil || !source.Apply(event) {
 		return
 	}
-	snapshot := w.controller.Snapshot()
+	snapshot := source.Snapshot()
 	if event.Err != nil {
 		w.logger.Error("gui search: dictionary=%s request=%d: %v", event.Dictionary, event.RequestID, event.Err)
 	} else {
@@ -416,17 +433,17 @@ func (w *mainWindow) renderSearchState() {
 		w.renderSelection()
 	case controller.ContentNoResults:
 		w.clearResults()
-		w.setMessage("No matching headwords", false)
+		w.setMessage("No matching headwords", false, false)
 	case controller.ContentSearchError:
 		w.clearResults()
-		w.setMessage("Search failed\n\nEdit the query to try again", true)
+		w.setMessage("Search failed\n\nEdit the query to try again", true, false)
 	case controller.ContentEmpty:
 		w.clearResults()
 		message := "Enter a search term\n\nUp/Down: Select result"
 		if len(w.databases.Services) > 1 {
 			message += "    Ctrl+Tab: Switch dictionary"
 		}
-		w.setMessage(message, false)
+		w.setMessage(message, false, false)
 	}
 }
 
@@ -469,25 +486,31 @@ func (w *mainWindow) setCount(count int) {
 	w.count.SetAccessibleName(fmt.Sprintf("Search results shown: %d", count))
 }
 
-func (w *mainWindow) setMessage(text string, showLog bool) {
+func (w *mainWindow) setMessage(text string, showLog, showBuild bool) {
 	w.message.SetText(text)
 	w.message.SetAccessibleDescription(text)
 	_, logAvailable := w.logger.Path()
 	w.messageLog.SetVisible(showLog && logAvailable)
+	w.messageBuild.SetVisible(showBuild)
 	w.stack.SetCurrentIndex(1)
 }
 
 func (w *mainWindow) renderUnavailableDatabases() {
 	var messages []string
 	showLog := false
+	showBuild := false
 	order := []dictionary.Type{w.databases.Initial, w.databases.Initial.Other()}
 	for _, dict := range order {
 		status := w.databases.Statuses[dict]
 		unavailable := controller.MessageForUnavailable(dict, status.Category)
 		messages = append(messages, unavailable.Text)
 		showLog = showLog || unavailable.OpenLog
+		if unavailable.Build && !showBuild {
+			showBuild = true
+			w.messageBuildDictionary = dict
+		}
 	}
-	w.setMessage(messages[0]+"\n\n"+messages[1], showLog)
+	w.setMessage(messages[0]+"\n\n"+messages[1], showLog, showBuild)
 }
 
 func (w *mainWindow) switchDictionary(dict dictionary.Type) {
@@ -710,19 +733,32 @@ func (w *mainWindow) saveWindowState() {
 
 func (w *mainWindow) beginShutdown(exitCode int) {
 	w.shutdownOnce.Do(func() {
+		w.shuttingDown = true
 		w.saveWindowState()
 		w.central.SetEnabled(false)
 		w.main.MenuBar().SetEnabled(false)
+		w.buildAction.SetEnabled(false)
 		if w.dispatcher != nil {
 			w.dispatcher.close()
 		}
-		if w.controller != nil {
-			w.controller.BeginClose()
+		searchController := w.controller
+		if searchController != nil {
+			searchController.BeginClose()
+		}
+		w.buildMu.Lock()
+		process := w.buildProcess
+		w.buildMu.Unlock()
+		if process != nil {
+			process.Cancel()
 		}
 		go func() {
-			if w.controller != nil {
-				w.controller.Wait()
+			if searchController != nil {
+				searchController.Wait()
 			}
+			if process != nil {
+				process.Wait()
+			}
+			w.buildWorkers.Wait()
 			if w.dispatcher != nil {
 				w.dispatcher.wait()
 			}

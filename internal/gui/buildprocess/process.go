@@ -52,7 +52,7 @@ func (e *Error) Unwrap() error { return e.Err }
 // CategoryOf returns the stable category carried by err, or CategoryUnknown.
 func CategoryOf(err error) Category {
 	var buildErr *Error
-	if errors.As(err, &buildErr) {
+	if errors.As(err, &buildErr) && buildErr != nil {
 		return buildErr.Category
 	}
 	return CategoryUnknown
@@ -142,19 +142,35 @@ type Process struct {
 	stopOnce      sync.Once
 }
 
-// Start validates obvious source errors and launches ejquick-build.
+// Start validates obvious path errors and launches ejquick-build.
 func Start(options Options, handler Handler) (*Process, error) {
 	return start(options, handler, builderCommand)
+}
+
+// Validate checks paths and creates a missing output parent without launching
+// the builder. Start repeats these checks to avoid relying on caller state.
+func Validate(options Options) error {
+	return validateForStart(&options)
+}
+
+func validateForStart(options *Options) error {
+	if options.Binary == "" {
+		return &Error{Category: CategoryBinaryMissing, Err: errors.New("builder binary path is empty")}
+	}
+	if _, err := exec.LookPath(options.Binary); err != nil {
+		return &Error{Category: CategoryBinaryMissing, Err: fmt.Errorf("find builder %s: %w", options.Binary, err)}
+	}
+	if err := validateOptions(options); err != nil {
+		return err
+	}
+	return nil
 }
 
 type commandFactory func(Options) *exec.Cmd
 
 func start(options Options, handler Handler, factory commandFactory) (*Process, error) {
-	if options.Binary == "" {
-		return nil, &Error{Category: CategoryBinaryMissing, Err: errors.New("builder binary path is empty")}
-	}
-	if err := validateOptions(&options); err != nil {
-		return nil, &Error{Category: CategorySourceInvalid, Err: err}
+	if err := validateForStart(&options); err != nil {
+		return nil, err
 	}
 	if options.KillAfter <= 0 {
 		options.KillAfter = defaultKillAfter
@@ -206,42 +222,56 @@ func builderCommand(options Options) *exec.Cmd {
 	return exec.Command(options.Binary, args...)
 }
 
-func validateOptions(options *Options) error {
+func validateOptions(options *Options) *Error {
 	if !dictionary.IsValid(options.Dictionary) {
-		return fmt.Errorf("invalid dictionary %q", options.Dictionary)
+		return &Error{Category: CategoryUnknown, Err: fmt.Errorf("invalid dictionary %q", options.Dictionary)}
 	}
-	if options.Source == "" || options.Output == "" {
-		return errors.New("source and output paths must not be empty")
+	if options.Source == "" {
+		return &Error{Category: CategorySourceInvalid, Err: errors.New("source path must not be empty")}
+	}
+	if options.Output == "" {
+		return &Error{Category: CategoryBuildFailed, Err: errors.New("output path must not be empty")}
 	}
 	source, err := filepath.Abs(options.Source)
 	if err != nil {
-		return fmt.Errorf("resolve source: %w", err)
+		return &Error{Category: CategorySourceInvalid, Err: fmt.Errorf("resolve source: %w", err)}
 	}
 	output, err := filepath.Abs(options.Output)
 	if err != nil {
-		return fmt.Errorf("resolve output: %w", err)
+		return &Error{Category: CategoryBuildFailed, Err: fmt.Errorf("resolve output: %w", err)}
 	}
 	if pathsEqual(source, output) {
-		return errors.New("source and output paths are the same")
+		return &Error{Category: CategorySourceInvalid, Err: errors.New("source and output paths are the same")}
 	}
 	info, err := os.Stat(source)
 	if err != nil {
-		return fmt.Errorf("stat source: %w", err)
+		return &Error{Category: CategorySourceInvalid, Err: fmt.Errorf("stat source: %w", err)}
 	}
 	if !info.Mode().IsRegular() {
-		return errors.New("source is not a regular file")
+		return &Error{Category: CategorySourceInvalid, Err: errors.New("source is not a regular file")}
 	}
 	if outputInfo, statErr := os.Stat(output); statErr == nil && os.SameFile(info, outputInfo) {
-		return errors.New("source and output refer to the same file")
+		return &Error{Category: CategorySourceInvalid, Err: errors.New("source and output refer to the same file")}
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("stat output: %w", statErr)
+		return &Error{Category: CategoryBuildFailed, Err: fmt.Errorf("stat output: %w", statErr)}
 	}
 	file, err := os.Open(source)
 	if err != nil {
-		return fmt.Errorf("open source: %w", err)
+		return &Error{Category: CategorySourceInvalid, Err: fmt.Errorf("open source: %w", err)}
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("close source: %w", err)
+		return &Error{Category: CategorySourceInvalid, Err: fmt.Errorf("close source: %w", err)}
+	}
+	parent := filepath.Dir(output)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return &Error{Category: CategoryBuildFailed, Err: fmt.Errorf("create output directory: %w", err)}
+	}
+	parentInfo, err := os.Stat(parent)
+	if err != nil {
+		return &Error{Category: CategoryBuildFailed, Err: fmt.Errorf("stat output directory: %w", err)}
+	}
+	if !parentInfo.IsDir() {
+		return &Error{Category: CategoryBuildFailed, Err: errors.New("output parent is not a directory")}
 	}
 	options.Source = source
 	options.Output = output

@@ -104,6 +104,35 @@ func TestDatabasesCloseIsIdempotentAndJoinsErrors(t *testing.T) {
 	}
 }
 
+func TestDatabasesCloseAndSetDictionary(t *testing.T) {
+	old := &fakeService{}
+	replacement := &fakeService{}
+	state := &Databases{
+		Services: map[dictionary.Type]Service{dictionary.Eiwa: old},
+		Statuses: map[dictionary.Type]DatabaseStatus{dictionary.Eiwa: {Available: true}},
+	}
+	if err := state.CloseDictionary(dictionary.Eiwa); err != nil {
+		t.Fatalf("CloseDictionary: %v", err)
+	}
+	if err := state.CloseDictionary(dictionary.Eiwa); err != nil {
+		t.Fatalf("second CloseDictionary: %v", err)
+	}
+	if old.closed != 1 || state.Services[dictionary.Eiwa] != nil {
+		t.Fatalf("old service closed=%d services=%#v", old.closed, state.Services)
+	}
+
+	status := DatabaseStatus{Available: true}
+	state.SetDictionary(dictionary.Eiwa, replacement, status)
+	if state.Services[dictionary.Eiwa] != replacement || state.Statuses[dictionary.Eiwa] != status {
+		t.Errorf("state after replacement = %#v", state)
+	}
+	missing := DatabaseStatus{Category: search.OpenMissing, Err: errors.New("missing")}
+	state.SetDictionary(dictionary.Eiwa, nil, missing)
+	if state.Services[dictionary.Eiwa] != nil || state.Statuses[dictionary.Eiwa].Category != search.OpenMissing {
+		t.Errorf("state after unavailable = %#v", state)
+	}
+}
+
 func TestOpenDatabasesClosesServiceReturnedWithError(t *testing.T) {
 	unexpected := &fakeService{}
 	state := openDatabases(startupConfig(dictionary.Eiwa), nil,

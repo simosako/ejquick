@@ -297,6 +297,29 @@ func TestStartClassifiesValidationAndLaunchFailures(t *testing.T) {
 	if _, err := Start(options, nil); CategoryOf(err) != CategorySourceInvalid {
 		t.Errorf("same path error = %v, category = %q", err, CategoryOf(err))
 	}
+
+	options = testOptions(t)
+	parentFile := filepath.Join(t.TempDir(), "not-a-directory")
+	writeTestFile(t, parentFile)
+	options.Output = filepath.Join(parentFile, "eiwa.sqlite3")
+	if _, err := Start(options, nil); CategoryOf(err) != CategoryBuildFailed {
+		t.Errorf("output parent error = %v, category = %q", err, CategoryOf(err))
+	}
+}
+
+func TestValidateCreatesMissingOutputParent(t *testing.T) {
+	options := testOptions(t)
+	options.Output = filepath.Join(filepath.Dir(options.Output), "missing", "nested", "eiwa.sqlite3")
+	if err := Validate(options); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	info, err := os.Stat(filepath.Dir(options.Output))
+	if err != nil {
+		t.Fatalf("stat output parent: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("output parent is not a directory")
+	}
 }
 
 func TestBuilderCommandArguments(t *testing.T) {

@@ -56,30 +56,10 @@ func openDatabases(cfg *config.Config, logger Logger, openService openServiceFun
 	}
 	order := []dictionary.Type{cfg.DefaultDict(), cfg.DefaultDict().Other()}
 	for _, dict := range order {
-		path := cfg.Database(dict)
-		started := time.Now()
-		service, err := openService(path, dict, cfg.Search.MaxResults)
-		elapsed := time.Since(started).Round(time.Microsecond)
-		if err != nil || service == nil {
-			if service != nil {
-				_ = service.Close()
-			}
-			if err == nil {
-				err = errors.New("open service returned nil")
-			}
-			category := search.OpenCategoryOf(err)
-			state.Statuses[dict] = DatabaseStatus{Category: category, Err: err}
-			if logger != nil {
-				logger.Error("gui startup: open database dictionary=%s path=%q category=%s: %v", dict, path, category, err)
-				logger.Debug("gui startup: open database dictionary=%s available=false elapsed=%s", dict, elapsed)
-			}
-			continue
-		}
-
-		state.Services[dict] = service
-		state.Statuses[dict] = DatabaseStatus{Available: true}
-		if logger != nil {
-			logger.Debug("gui startup: open database dictionary=%s available=true elapsed=%s", dict, elapsed)
+		service, status := inspectDictionary(cfg, dict, logger, "gui startup", openService)
+		state.Statuses[dict] = status
+		if service != nil {
+			state.Services[dict] = service
 		}
 	}
 
@@ -87,6 +67,43 @@ func openDatabases(cfg *config.Config, logger Logger, openService openServiceFun
 		state.Initial = state.Initial.Other()
 	}
 	return state
+}
+
+// OpenDictionary validates and opens one configured dictionary. Ownership of
+// a non-nil service passes to the caller.
+func OpenDictionary(cfg *config.Config, dict dictionary.Type, logger Logger) (Service, DatabaseStatus) {
+	return inspectDictionary(cfg, dict, logger, "gui builder reopen", openSearchService)
+}
+
+func inspectDictionary(
+	cfg *config.Config,
+	dict dictionary.Type,
+	logger Logger,
+	logContext string,
+	openService openServiceFunc,
+) (Service, DatabaseStatus) {
+	path := cfg.Database(dict)
+	started := time.Now()
+	service, err := openService(path, dict, cfg.Search.MaxResults)
+	elapsed := time.Since(started).Round(time.Microsecond)
+	if err != nil || service == nil {
+		if service != nil {
+			_ = service.Close()
+		}
+		if err == nil {
+			err = errors.New("open service returned nil")
+		}
+		category := search.OpenCategoryOf(err)
+		if logger != nil {
+			logger.Error("%s: open database dictionary=%s path=%q category=%s: %v", logContext, dict, path, category, err)
+			logger.Debug("%s: open database dictionary=%s available=false elapsed=%s", logContext, dict, elapsed)
+		}
+		return nil, DatabaseStatus{Category: category, Err: err}
+	}
+	if logger != nil {
+		logger.Debug("%s: open database dictionary=%s available=true elapsed=%s", logContext, dict, elapsed)
+	}
+	return service, DatabaseStatus{Available: true}
 }
 
 func openSearchService(path string, dict dictionary.Type, maxResults int) (Service, error) {
@@ -119,4 +136,37 @@ func (d *Databases) Close() error {
 		}
 	}
 	return errors.Join(closeErrors...)
+}
+
+// CloseDictionary removes and closes one service. It is idempotent.
+func (d *Databases) CloseDictionary(dict dictionary.Type) error {
+	if d == nil || d.Services == nil {
+		return nil
+	}
+	service := d.Services[dict]
+	delete(d.Services, dict)
+	if service == nil {
+		return nil
+	}
+	if err := service.Close(); err != nil {
+		return fmt.Errorf("close %s database: %w", dict, err)
+	}
+	return nil
+}
+
+// SetDictionary replaces one service and status. The caller must first close
+// any existing service for dict.
+func (d *Databases) SetDictionary(dict dictionary.Type, service Service, status DatabaseStatus) {
+	if d.Services == nil {
+		d.Services = make(map[dictionary.Type]Service, len(dictionary.All))
+	}
+	if d.Statuses == nil {
+		d.Statuses = make(map[dictionary.Type]DatabaseStatus, len(dictionary.All))
+	}
+	if service == nil {
+		delete(d.Services, dict)
+	} else {
+		d.Services[dict] = service
+	}
+	d.Statuses[dict] = status
 }
