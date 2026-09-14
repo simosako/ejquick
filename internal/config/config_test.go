@@ -115,6 +115,8 @@ func TestLoadRejectsBadValues(t *testing.T) {
 			p := writeConfig(t, tt.body)
 			if _, err := config.Load(p); err == nil {
 				t.Errorf("Load unexpectedly succeeded for %s", tt.name)
+			} else if category, ok := config.LoadCategoryOf(err); !ok || category != config.LoadInvalid {
+				t.Errorf("Load category = %q, %v; want %q, true", category, ok, config.LoadInvalid)
 			}
 		})
 	}
@@ -138,6 +140,8 @@ func TestLoadAcceptsMaxResultsBoundaries(t *testing.T) {
 func TestLoadMissingFileIsError(t *testing.T) {
 	if _, err := config.Load(filepath.Join(t.TempDir(), "missing.toml")); err == nil {
 		t.Error("missing config file unexpectedly loaded")
+	} else if category, ok := config.LoadCategoryOf(err); !ok || category != config.LoadUnreadable {
+		t.Errorf("Load category = %q, %v; want %q, true", category, ok, config.LoadUnreadable)
 	}
 }
 

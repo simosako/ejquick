@@ -63,12 +63,12 @@ func DefaultPath() (string, error) {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, loadFailure(LoadUnreadable, fmt.Errorf("read config: %w", err))
 	}
 	var raw rawConfig
 	decoder := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
 	if err := decoder.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("parse config %s: %w", path, err)
+		return nil, loadFailure(LoadInvalid, fmt.Errorf("parse config %s: %w", path, err))
 	}
 	cfg := Config{
 		Eiwa: raw.Eiwa,
@@ -82,7 +82,7 @@ func Load(path string) (*Config, error) {
 		cfg.Search.MaxResults = *raw.Search.MaxResults
 	}
 	if err := cfg.validate(); err != nil {
-		return nil, fmt.Errorf("config %s: %w", path, err)
+		return nil, loadFailure(LoadInvalid, fmt.Errorf("config %s: %w", path, err))
 	}
 	cfg.applyDefaults(path)
 	return &cfg, nil

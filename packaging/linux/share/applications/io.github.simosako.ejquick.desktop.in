@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=EJQuick
+GenericName=Dictionary
+Comment=Search local English-Japanese dictionaries
+Icon=accessories-dictionary
+Terminal=false
+Categories=Utility;Dictionary;TextTools;
+StartupNotify=true
+@TRYEXEC@
+@EXEC@

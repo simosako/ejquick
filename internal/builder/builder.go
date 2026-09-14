@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -57,51 +58,79 @@ func Run(opts Options) (Stats, error) {
 }
 
 func run(opts Options, publishDB func(string, string) error) (Stats, error) {
+	return runContext(context.Background(), opts, humanReporter(opts.Progress), publishDB)
+}
+
+// RunContext executes a cancellable build and reports typed progress events.
+// The legacy Options.Progress writer is not used; callers that need human
+// output should use Run, while GUI and protocol callers supply report.
+func RunContext(ctx context.Context, opts Options, report func(Event) error) (Stats, error) {
+	return runContext(ctx, opts, report, publish)
+}
+
+func runContext(ctx context.Context, opts Options, report reporter, publishDB func(string, string) error) (Stats, error) {
 	start := time.Now()
 	var stats Stats
-	if opts.Progress == nil {
-		opts.Progress = io.Discard
-	}
 
 	if !dictionary.IsValid(opts.Type) {
 		return stats, fmt.Errorf("invalid dictionary type %q", opts.Type)
 	}
 	if opts.Input == "" || opts.Output == "" {
-		return stats, errors.New("input and output paths are required")
+		return stats, classify(ErrorSourceInvalid, errors.New("input and output paths are required"))
 	}
+	if err := ctx.Err(); err != nil {
+		return stats, err
+	}
+
+	canonicalOutput, lock, err := prepareOutput(opts.Output)
+	if err != nil {
+		return stats, err
+	}
+	defer lock.close()
+	opts.Output = canonicalOutput
 
 	in, err := os.Open(opts.Input)
 	if err != nil {
-		return stats, fmt.Errorf("open input: %w", err)
+		return stats, classify(ErrorSourceInvalid, fmt.Errorf("open input: %w", err))
 	}
 	defer in.Close()
 	inputInfo, err := in.Stat()
 	if err != nil {
-		return stats, fmt.Errorf("stat input: %w", err)
+		return stats, classify(ErrorSourceInvalid, fmt.Errorf("stat input: %w", err))
+	}
+	if !inputInfo.Mode().IsRegular() {
+		return stats, classify(ErrorSourceInvalid, errors.New("input must be a regular file"))
 	}
 	if same, err := samePath(opts.Input, opts.Output); err != nil {
-		return stats, err
+		return stats, classify(ErrorSourceInvalid, err)
 	} else if same {
-		return stats, errors.New("input and output refer to the same file")
+		return stats, classify(ErrorSourceInvalid, errors.New("input and output refer to the same file"))
 	}
 
 	// Refuse to touch an existing output unless --force was given.
-	if outputInfo, err := os.Stat(opts.Output); err == nil {
+	outputInfo, outputStatErr := os.Stat(opts.Output)
+	if outputStatErr == nil {
 		if os.SameFile(inputInfo, outputInfo) {
-			return stats, errors.New("input and output refer to the same file")
+			return stats, classify(ErrorSourceInvalid, errors.New("input and output refer to the same file"))
 		}
-		if !opts.Force {
-			return stats, fmt.Errorf("output %s already exists (use --force to replace)", opts.Output)
-		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return stats, fmt.Errorf("stat output: %w", err)
+	} else if !os.IsNotExist(outputStatErr) {
+		return stats, fmt.Errorf("stat output: %w", outputStatErr)
+	}
+	// Lstat separately catches dangling symlinks, which Stat reports as
+	// missing, without changing the same-file error above.
+	if err := rejectUnsafeOutput(opts.Output); err != nil {
+		return stats, err
+	}
+	if outputStatErr == nil && !opts.Force {
+		return stats, fmt.Errorf("output %s already exists (use --force to replace)", opts.Output)
 	}
 
-	// Create the temporary database in the output directory so the
-	// final publish is a same-filesystem rename.
-	if err := os.MkdirAll(filepath.Dir(opts.Output), 0o755); err != nil {
-		return stats, fmt.Errorf("create output directory: %w", err)
+	if err := ctx.Err(); err != nil {
+		return stats, err
 	}
+
+	// Create the temporary database in the output directory so the final
+	// publish is a same-filesystem rename.
 	tmp, err := os.CreateTemp(filepath.Dir(opts.Output), ".ejquick-build-*.sqlite3")
 	if err != nil {
 		return stats, fmt.Errorf("create temporary database: %w", err)
@@ -112,6 +141,9 @@ func run(opts Options, publishDB func(string, string) error) (Stats, error) {
 		return stats, fmt.Errorf("close temporary placeholder: %w", err)
 	}
 	os.Remove(tmpPath)
+	if err := emit(report, Event{Kind: EventTemporaryCreated, TemporaryPath: tmpPath}); err != nil {
+		return stats, err
+	}
 
 	// Everything below must clean up the temporary database on error.
 	buildErr := func() error {
@@ -119,7 +151,7 @@ func run(opts Options, publishDB func(string, string) error) (Stats, error) {
 		if err != nil {
 			return err
 		}
-		if err := build(db, in, opts, &stats); err != nil {
+		if err := buildContext(ctx, db, in, opts, &stats, report); err != nil {
 			db.Close()
 			return err
 		}
@@ -134,12 +166,16 @@ func run(opts Options, publishDB func(string, string) error) (Stats, error) {
 	}
 
 	// Validate the finished temporary database read-only.
-	if err := validate(tmpPath, opts, stats); err != nil {
+	if err := validateContext(ctx, tmpPath, opts, stats, report); err != nil {
 		os.Remove(tmpPath)
 		return stats, fmt.Errorf("validation failed: %w", err)
 	}
 
 	// Publish: sync the file, then atomically rename over the output.
+	if err := ctx.Err(); err != nil {
+		os.Remove(tmpPath)
+		return stats, err
+	}
 	if err := publishDB(tmpPath, opts.Output); err != nil {
 		os.Remove(tmpPath)
 		return stats, fmt.Errorf("publish: %w", err)
@@ -153,7 +189,9 @@ func run(opts Options, publishDB func(string, string) error) (Stats, error) {
 	stats.Compacted = opts.Compact
 	stats.Elapsed = time.Since(start)
 
-	writeSummary(opts.Progress, stats)
+	if err := emit(report, Event{Kind: EventCompleted, Stats: stats}); err != nil {
+		return stats, err
+	}
 	return stats, nil
 }
 
@@ -172,74 +210,83 @@ func samePath(a, b string) (bool, error) {
 	return absA == absB, nil
 }
 
-// build performs all write operations on the temporary database.
-func build(db *sql.DB, in io.Reader, opts Options, stats *Stats) error {
-	if _, err := db.Exec(pragmas); err != nil {
+// buildContext performs all write operations on the temporary database.
+func buildContext(ctx context.Context, db *sql.DB, in io.Reader, opts Options, stats *Stats, report reporter) error {
+	if _, err := db.ExecContext(ctx, pragmas); err != nil {
 		return fmt.Errorf("apply pragmas: %w", err)
 	}
-	if _, err := db.Exec(entriesSchema); err != nil {
+	if _, err := db.ExecContext(ctx, entriesSchema); err != nil {
 		return fmt.Errorf("create entries table: %w", err)
 	}
-	if err := insertEntries(db, in, opts, stats); err != nil {
+	if err := insertEntriesContext(ctx, db, in, opts, stats, report); err != nil {
 		return err
 	}
-	if err := phase(opts.Progress, "B-tree index", func() error {
-		_, err := db.Exec(indexSchema)
+	if err := buildPhase(ctx, report, PhaseBTree, func() error {
+		_, err := db.ExecContext(ctx, indexSchema)
 		return err
 	}); err != nil {
 		return fmt.Errorf("create b-tree index: %w", err)
 	}
-	if err := phase(opts.Progress, "FTS build", func() error {
-		if _, err := db.Exec(ftsSchema); err != nil {
+	if err := buildPhase(ctx, report, PhaseFTS, func() error {
+		if _, err := db.ExecContext(ctx, ftsSchema); err != nil {
 			return err
 		}
-		if _, err := db.Exec("INSERT INTO entries_fts(entries_fts) VALUES('rebuild')"); err != nil {
+		if _, err := db.ExecContext(ctx, "INSERT INTO entries_fts(entries_fts) VALUES('rebuild')"); err != nil {
 			return err
 		}
-		_, err := db.Exec("INSERT INTO entries_fts(entries_fts) VALUES('integrity-check')")
+		_, err := db.ExecContext(ctx, "INSERT INTO entries_fts(entries_fts) VALUES('integrity-check')")
 		return err
 	}); err != nil {
 		return fmt.Errorf("build fts index: %w", err)
 	}
 	if opts.Compact {
-		if err := phase(opts.Progress, "VACUUM", func() error {
-			_, err := db.Exec("VACUUM")
+		if err := buildPhase(ctx, report, PhaseVacuum, func() error {
+			_, err := db.ExecContext(ctx, "VACUUM")
 			return err
 		}); err != nil {
 			return fmt.Errorf("vacuum: %w", err)
 		}
 	}
-	if err := phase(opts.Progress, "ANALYZE", func() error {
-		_, err := db.Exec("ANALYZE")
+	if err := buildPhase(ctx, report, PhaseAnalyze, func() error {
+		_, err := db.ExecContext(ctx, "ANALYZE")
 		return err
 	}); err != nil {
 		return fmt.Errorf("analyze: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA optimize"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil {
 		return fmt.Errorf("pragma optimize: %w", err)
 	}
-	return writeMetadata(db, opts, stats)
+	return writeMetadata(ctx, db, opts, stats)
 }
 
-// insertEntries streams the source file into the entries table inside a
-// single transaction, printing progress every progressEvery physical
-// lines and at the end of input.
-func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr error) {
-	prog := opts.Progress
-	fmt.Fprintln(prog, "Reading: start")
+// insertEntries preserves the legacy helper used by focused unit tests.
+func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) error {
+	return insertEntriesContext(context.Background(), db, in, opts, stats, humanReporter(opts.Progress))
+}
+
+// insertEntriesContext streams the source file into the entries table
+// inside a single cancellable transaction.
+func insertEntriesContext(ctx context.Context, db *sql.DB, in io.Reader, opts Options, stats *Stats, report reporter) (retErr error) {
+	if err := emit(report, Event{Kind: EventPhase, Phase: PhaseReading, State: PhaseStarted}); err != nil {
+		return err
+	}
 	defer func() {
 		if retErr != nil {
-			fmt.Fprintf(prog, "Reading: failed: %v\n", retErr)
+			if reportErr := emit(report, Event{
+				Kind: EventPhase, Phase: PhaseReading, State: PhaseFailed, Err: retErr,
+			}); reportErr != nil {
+				retErr = errors.Join(retErr, reportErr)
+			}
 		}
 	}()
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin insert transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare("INSERT INTO entries(id, headword, headword_norm, body) VALUES (?, ?, ?, ?)")
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO entries(id, headword, headword_norm, body) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
 	}
@@ -248,6 +295,9 @@ func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr
 	r := parser.NewReader(in)
 	var nrm string
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		line, err := r.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -261,7 +311,7 @@ func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr
 			if err != nil {
 				return fmt.Errorf("normalize line %d: %w", line.LineNo, err)
 			}
-			if _, err := stmt.Exec(line.LineNo, line.Entry.Headword, nrm, line.Entry.Body); err != nil {
+			if _, err := stmt.ExecContext(ctx, line.LineNo, line.Entry.Headword, nrm, line.Entry.Body); err != nil {
 				return fmt.Errorf("insert line %d: %w", line.LineNo, err)
 			}
 			stats.Entries++
@@ -269,19 +319,23 @@ func insertEntries(db *sql.DB, in io.Reader, opts Options, stats *Stats) (retErr
 			stats.Skipped++
 			// Report skips as line number + reason only; never the
 			// full line contents.
-			fmt.Fprintf(prog, "Skipped line %d: %s\n", line.Skip.LineNo, line.Skip.Reason)
+			if err := emit(report, Event{Kind: EventSkipped, Phase: PhaseReading,
+				Lines: line.Skip.LineNo, Reason: line.Skip.Reason}); err != nil {
+				return err
+			}
 		}
 		if stats.SourceLines%progressEvery == 0 {
-			fmt.Fprintf(prog, "Reading: lines=%d entries=%d skipped=%d\n",
-				stats.SourceLines, stats.Entries, stats.Skipped)
+			if err := emit(report, Event{Kind: EventProgress, Phase: PhaseReading,
+				Lines: stats.SourceLines, Entries: stats.Entries, Skipped: stats.Skipped}); err != nil {
+				return err
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert transaction: %w", err)
 	}
-	fmt.Fprintf(prog, "Reading: done lines=%d entries=%d skipped=%d\n",
-		stats.SourceLines, stats.Entries, stats.Skipped)
-	return nil
+	return emit(report, Event{Kind: EventPhase, Phase: PhaseReading, State: PhaseDone,
+		Lines: stats.SourceLines, Entries: stats.Entries, Skipped: stats.Skipped})
 }
 
 // sourceVersion extracts a version like "144-10" from the input filename,
@@ -295,8 +349,8 @@ func sourceVersion(input string) string {
 }
 
 // writeMetadata stores the build metadata after all data is in place.
-func writeMetadata(db *sql.DB, opts Options, stats *Stats) error {
-	if _, err := db.Exec(metadataSchema); err != nil {
+func writeMetadata(ctx context.Context, db *sql.DB, opts Options, stats *Stats) error {
+	if _, err := db.ExecContext(ctx, metadataSchema); err != nil {
 		return fmt.Errorf("create metadata table: %w", err)
 	}
 	compact := "false"
@@ -318,31 +372,37 @@ func writeMetadata(db *sql.DB, opts Options, stats *Stats) error {
 		{KeyFTSVersion, FTSVersion},
 		{KeyCompacted, compact},
 	}
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.Prepare("INSERT INTO metadata(key, value) VALUES (?, ?)")
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO metadata(key, value) VALUES (?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, kv := range pairs {
-		if _, err := stmt.Exec(kv[0], kv[1]); err != nil {
+		if _, err := stmt.ExecContext(ctx, kv[0], kv[1]); err != nil {
 			return fmt.Errorf("write metadata %s: %w", kv[0], err)
 		}
 	}
 	return tx.Commit()
 }
 
-// validate reopens the finished database read-only and checks schema,
+// validateContext reopens the finished database read-only and checks schema,
 // metadata, counts, and that both search paths return results.
-func validate(path string, opts Options, stats Stats) (retErr error) {
-	phaseStart(opts.Progress, "Validation")
+func validateContext(ctx context.Context, path string, opts Options, stats Stats, report reporter) (retErr error) {
+	if err := emit(report, Event{Kind: EventPhase, Phase: PhaseValidation, State: PhaseStarted}); err != nil {
+		return err
+	}
 	defer func() {
 		if retErr != nil {
-			fmt.Fprintf(opts.Progress, "Validation: failed: %v\n", retErr)
+			if reportErr := emit(report, Event{
+				Kind: EventPhase, Phase: PhaseValidation, State: PhaseFailed, Err: retErr,
+			}); reportErr != nil {
+				retErr = errors.Join(retErr, reportErr)
+			}
 		}
 	}()
 
@@ -355,7 +415,7 @@ func validate(path string, opts Options, stats Stats) (retErr error) {
 	// Required tables exist.
 	for _, table := range []string{"entries", "entries_fts", "metadata"} {
 		var name string
-		err := db.QueryRow(
+		err := db.QueryRowContext(ctx,
 			"SELECT name FROM sqlite_master WHERE name = ?", table).Scan(&name)
 		if err != nil {
 			return fmt.Errorf("missing table %s: %w", table, err)
@@ -364,7 +424,7 @@ func validate(path string, opts Options, stats Stats) (retErr error) {
 
 	// Metadata values.
 	meta := map[string]string{}
-	rows, err := db.Query("SELECT key, value FROM metadata")
+	rows, err := db.QueryContext(ctx, "SELECT key, value FROM metadata")
 	if err != nil {
 		return fmt.Errorf("read metadata: %w", err)
 	}
@@ -402,7 +462,7 @@ func validate(path string, opts Options, stats Stats) (retErr error) {
 
 	// Row count matches the insert statistics.
 	var count int64
-	if err := db.QueryRow("SELECT count(*) FROM entries").Scan(&count); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM entries").Scan(&count); err != nil {
 		return fmt.Errorf("count entries: %w", err)
 	}
 	if count != stats.Entries {
@@ -411,30 +471,33 @@ func validate(path string, opts Options, stats Stats) (retErr error) {
 
 	// Smoke tests: one prefix query and one FTS substring query.
 	var smokeID int64
-	err = db.QueryRow(
+	err = db.QueryRowContext(ctx,
 		"SELECT id FROM entries ORDER BY headword_norm LIMIT 1").Scan(&smokeID)
 	if err != nil {
 		return fmt.Errorf("prefix smoke query: %w", err)
 	}
-	if err := validateFTSSmoke(db); err != nil {
+	if err := validateFTSSmokeContext(ctx, db); err != nil {
 		return err
 	}
 
-	phaseDone(opts.Progress, "Validation")
-	return nil
+	return emit(report, Event{Kind: EventPhase, Phase: PhaseValidation, State: PhaseDone})
 }
 
 // validateFTSSmoke exercises the trigram index with a matchable entry when
 // one exists. Dictionaries containing only shorter entries still execute a
 // harmless bound MATCH query so a missing or invalid FTS table is detected.
 func validateFTSSmoke(db *sql.DB) error {
+	return validateFTSSmokeContext(context.Background(), db)
+}
+
+func validateFTSSmokeContext(ctx context.Context, db *sql.DB) error {
 	var norm string
-	err := db.QueryRow(
+	err := db.QueryRowContext(ctx,
 		"SELECT headword_norm FROM entries WHERE length(headword_norm) >= 3 ORDER BY headword_norm LIMIT 1").
 		Scan(&norm)
 	if errors.Is(err, sql.ErrNoRows) {
 		var count int64
-		if err := db.QueryRow(
+		if err := db.QueryRowContext(ctx,
 			"SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?",
 			`"ejquick-builder-smoke"`).Scan(&count); err != nil {
 			return fmt.Errorf("fts smoke query: %w", err)
@@ -447,7 +510,7 @@ func validateFTSSmoke(db *sql.DB) error {
 
 	ftsQuery := `"` + strings.ReplaceAll(norm, `"`, `""`) + `"`
 	var count int64
-	if err := db.QueryRow(
+	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM entries_fts f JOIN entries e ON e.id = f.rowid
 		 WHERE entries_fts MATCH ? AND instr(e.headword_norm, ?) > 0`,
 		ftsQuery, norm).Scan(&count); err != nil {
@@ -493,8 +556,26 @@ func publish(tmpPath, output string) error {
 	return d.Close()
 }
 
-// phase prints "Name: start", runs fn, then prints "Name: done" or
-// "Name: failed".
+func buildPhase(ctx context.Context, report reporter, phaseName Phase, fn func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := emit(report, Event{Kind: EventPhase, Phase: phaseName, State: PhaseStarted}); err != nil {
+		return err
+	}
+	if err := fn(); err != nil {
+		reportErr := emit(report, Event{
+			Kind: EventPhase, Phase: phaseName, State: PhaseFailed, Err: err,
+		})
+		if reportErr != nil {
+			return errors.Join(err, reportErr)
+		}
+		return err
+	}
+	return emit(report, Event{Kind: EventPhase, Phase: phaseName, State: PhaseDone})
+}
+
+// phase preserves the fixed-line helper used by focused unit tests.
 func phase(w io.Writer, name string, fn func() error) error {
 	phaseStart(w, name)
 	if err := fn(); err != nil {

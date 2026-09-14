@@ -75,3 +75,23 @@ func TestNopIsSafe(t *testing.T) {
 	}
 	logging.Nop().Error("z")
 }
+
+func TestLoggerPathAvailability(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state", "ejquick.log")
+	logger, err := logging.OpenFile(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := logger.Path(); !ok || got != path {
+		t.Fatalf("Path = %q, %t; want %q, true", got, ok, path)
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := logger.Path(); ok || got != "" {
+		t.Fatalf("Path after Close = %q, %t; want unavailable", got, ok)
+	}
+	if got, ok := logging.Nop().Path(); ok || got != "" {
+		t.Fatalf("Nop Path = %q, %t; want unavailable", got, ok)
+	}
+}

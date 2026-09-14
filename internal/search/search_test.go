@@ -333,6 +333,40 @@ func TestOpenRepositoryRejectsWrongDictionary(t *testing.T) {
 	db := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
 	if _, err := search.OpenRepository(db, dictionary.Waei); err == nil {
 		t.Error("opening an eiwa database as waei unexpectedly succeeded")
+	} else if got := search.OpenCategoryOf(err); got != search.OpenWrongDictionary {
+		t.Errorf("category = %q, want %q", got, search.OpenWrongDictionary)
+	}
+}
+
+func TestOpenRepositoryCategories(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.sqlite3")
+	if _, err := search.OpenRepository(missing, dictionary.Eiwa); search.OpenCategoryOf(err) != search.OpenMissing {
+		t.Errorf("missing category = %q; err = %v", search.OpenCategoryOf(err), err)
+	}
+
+	corrupt := filepath.Join(dir, "corrupt.sqlite3")
+	if err := os.WriteFile(corrupt, []byte("not a sqlite database"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := search.OpenRepository(corrupt, dictionary.Eiwa); search.OpenCategoryOf(err) != search.OpenCorrupt {
+		t.Errorf("corrupt category = %q; err = %v", search.OpenCategoryOf(err), err)
+	}
+
+	incompatible := buildFixtureDB(t, dictionary.Eiwa, fixtureLines(t))
+	db, err := sql.Open("sqlite", incompatible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP INDEX idx_entries_headword_norm"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := search.OpenRepository(incompatible, dictionary.Eiwa); search.OpenCategoryOf(err) != search.OpenIncompatible {
+		t.Errorf("incompatible category = %q; err = %v", search.OpenCategoryOf(err), err)
 	}
 }
 
