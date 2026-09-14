@@ -709,6 +709,18 @@ Qt と MIQT の組み合わせは build 再現性、platform support、CGO toolc
 事前 sample で native Wayland と日本語 IME を確認できており、問題発生時の変数を減らせるため A を採用した。
 更新時は version だけを変更せず、Qt / MIQT / Go / compiler の組み合わせを一つの baseline として更新履歴へ記録する。
 
+#### 開発環境と正式ビルド環境の分離
+
+手元の Ubuntu 24.04 開発環境では、Ubuntu が提供する **Qt 6.4.2** を使用してよい。
+これはローカルでの実装、基本的な compile、unit / widget test、および開発時の確認を行うための環境であり、正式リリースの build baseline とは区別する。
+
+正式リリースに関係する GUI test、package smoke test、release binary および配布 package の build は、GitHub Actions など十分な CPU / memory resource を持つ再現可能な build environment で実行し、**Qt 6.11.2、MIQT v0.14.0、Go 1.27.1** を固定して使用する。
+正式環境の Qt SDK、compiler、container または runner image の version / digest は release artifact とともに記録する。
+
+手元の Qt 6.4.2 での成功だけを Qt 6.11.2 の正式対応の根拠とはせず、Qt 6.11.2 による CI test と release build を正式な判定とする。
+一方、Qt 6.4.2 でも compile できる範囲を維持し、Qt 6.11.2 のみに依存する API を不用意に導入しない。
+Qt SDK を切り替えた場合は、MIQT の build cache が以前の Qt installation を参照しないよう `go clean -cache` を実行する。
+
 ### D7-L. 初期 Linux build / runtime baseline
 
 **状態: 決定済み（2026-09-13）**  
