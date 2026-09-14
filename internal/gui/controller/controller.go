@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/simosako/ejquick/internal/dictionary"
 	"github.com/simosako/ejquick/internal/normalize"
@@ -35,6 +36,7 @@ type Event struct {
 	Dictionary dictionary.Type
 	Entries    []search.Entry
 	Err        error
+	Elapsed    time.Duration
 }
 
 // Content identifies what the detail pane should display.
@@ -132,10 +134,12 @@ func (c *Controller) SetQuery(query string) bool {
 	c.workers.Add(1)
 	go func() {
 		defer c.workers.Done()
+		started := time.Now()
 		entries, err := service.Search(ctx, query)
 		if dispatcher != nil {
 			dispatcher.Post(Event{
 				RequestID: requestID, Dictionary: dict, Entries: entries, Err: err,
+				Elapsed: time.Since(started),
 			})
 		}
 	}()
