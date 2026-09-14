@@ -74,7 +74,7 @@ func newMainWindow(icon *qt.QIcon) *mainWindow {
 	splitter.SetStretchFactor(1, 2)
 	outer.AddWidget2(splitter.QWidget, 1)
 
-	window.SetCentralWidget(central.QWidget)
+	window.SetCentralWidget(central)
 
 	return &mainWindow{
 		window:     window,
