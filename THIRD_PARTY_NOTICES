@@ -47,6 +47,9 @@ text is reproduced at the end of this file.
     Copyright (c) 2013 Lucas Beyer
     (Contains code from the Go project under the BSD-3-Clause license.)
 
+  github.com/mappu/miqt v0.14.0
+    Copyright 2024-2025 mappu and the MIQT developers
+
   github.com/mattn/go-isatty v0.0.24
     Copyright (c) Yasuhiro Matsumoto <mattn.jp@gmail.com>
 

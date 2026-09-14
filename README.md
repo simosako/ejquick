@@ -1,10 +1,11 @@
 # EJQuick
 
 A fast local dictionary search tool for the [EIJIRO](https://booth.pm/) /
-WAEIJI English-Japanese and Japanese-English dictionaries, with a fzf-style
-incremental TUI and a scriptable CLI.
+WAEIJI English-Japanese and Japanese-English dictionaries, with a desktop GUI,
+a fzf-style incremental TUI, and a scriptable CLI.
 
-- **Linux / Windows / macOS**, single static binary, pure Go (no CGo)
+- **Linux / Windows / macOS TUI and CLI**, single static binary, pure Go (no CGo)
+- **Linux desktop GUI**, Qt 6 Widgets with native incremental search and IME input
 - Converts the purchased dictionary TXT into SQLite once, then searches it
   read-only
 - Prefix search on a B-tree index, substring search on FTS5 trigram
@@ -58,6 +59,25 @@ ejquick          # start the TUI
 Type to search. `Up`/`Down` (or `Ctrl-P`/`Ctrl-N`) move the selection,
 `PageUp`/`PageDown` scroll long entries, `Tab` switches between the
 English-Japanese and Japanese-English dictionaries, `Ctrl-C` quits.
+
+### Desktop GUI
+
+The Linux GUI is currently built separately from the portable TUI and CLI:
+
+```bash
+make build-gui QT_PREFIX=/path/to/qt
+tmp/ejquick-gui
+```
+
+`build-gui` places `ejquick-gui` and its required sibling `ejquick-build` in
+`tmp/` with the same product version. Release GUI builds use Qt 6.11.2, MIQT
+v0.14.0, and Go 1.27.1. The desktop must provide a font with CJK glyphs; EJQuick
+uses the system font and font fallback without bundling or overriding fonts.
+
+The self-contained Linux archive is designed to run `bin/ejquick-gui` directly.
+Its optional `install-desktop.sh` and `uninstall-desktop.sh` scripts only add or
+remove the per-user desktop menu entry. If the extracted directory is moved,
+run `install-desktop.sh` again from the new location.
 
 ## CLI search
 
@@ -129,6 +149,7 @@ Run the standard checks and artificial-data benchmarks with:
 ```bash
 make test
 make test-race
+make test-desktop
 make vet
 make tidy-check
 make bench

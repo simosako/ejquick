@@ -8,7 +8,7 @@ QT_PKG_CONFIG_PATH ?= $(QT_PREFIX)/lib/pkgconfig
 GUI_ENV := CGO_ENABLED=1 PKG_CONFIG_PATH="$(QT_PKG_CONFIG_PATH):$${PKG_CONFIG_PATH}"
 
 # Scratch binaries always go to tmp/ (never committed, see AGENTS.md).
-.PHONY: build build-gui test test-gui test-race vet vet-gui fmt fmt-check tidy-check bench bench-smoke clean release-check
+.PHONY: build build-gui test test-gui test-race test-desktop vet vet-gui fmt fmt-check tidy-check bench bench-smoke clean release-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick ./cmd/ejquick
@@ -23,6 +23,9 @@ test:
 
 test-gui:
 	$(GUI_ENV) go test -tags gui ./cmd/ejquick-gui ./internal/gui/...
+
+test-desktop:
+	packaging/linux/test-desktop-scripts.sh
 
 test-race:
 	go test -race ./...
