@@ -308,11 +308,11 @@ func (w *mainWindow) connectSignals() {
 	w.body.OnCustomContextMenuRequested(func(position *qt.QPoint) {
 		defer w.recoverCallback()
 		menu := w.body.CreateStandardContextMenuWithPosition(position)
-		defer menu.Delete()
+		defer deleteQtWrapper(menu)
 		menu.AddSeparator()
 		menu.AddAction(w.copyAction)
 		globalPosition := w.body.MapToGlobalWithQPoint(position)
-		defer globalPosition.Delete()
+		defer deleteQtWrapper(globalPosition)
 		menu.ExecWithPos(globalPosition)
 	})
 
@@ -605,8 +605,8 @@ func (w *mainWindow) setCurrentRow(row int) {
 	}
 	parent := qt.NewQModelIndex()
 	index := w.listModel.Index(row, 0, parent)
-	parent.Delete()
-	defer index.Delete()
+	deleteQtWrapper(parent)
+	defer deleteQtWrapper(index)
 	w.list.SelectionModel().SetCurrentIndex(index,
 		qt.QItemSelectionModel__ClearAndSelect|qt.QItemSelectionModel__Rows)
 	w.list.ScrollTo(index, qt.QAbstractItemView__EnsureVisible)
@@ -648,14 +648,14 @@ Ctrl+Tab            Switch dictionary
 Ctrl+Shift+C        Copy entire entry
 Ctrl+Q              Quit`
 	box := qt.NewQMessageBox3(qt.QMessageBox__Information, "EJQuick Keyboard Shortcuts", shortcuts)
-	defer box.Delete()
+	defer deleteQtWrapper(box)
 	box.SetTextFormat(qt.PlainText)
 	box.Exec()
 }
 
 func (w *mainWindow) showAbout() {
 	dialog := qt.NewQDialog(w.main.QWidget)
-	defer dialog.Delete()
+	defer deleteQtWrapper(dialog)
 	dialog.SetWindowTitle("About EJQuick")
 	dialog.SetWindowModality(qt.WindowModal)
 	layout := qt.NewQVBoxLayout2()
@@ -666,7 +666,7 @@ func (w *mainWindow) showAbout() {
 		iconLabel := qt.NewQLabel(dialog.QWidget)
 		pixmap := w.icon.Pixmap2(48, 48)
 		iconLabel.SetPixmap(pixmap)
-		pixmap.Delete()
+		deleteQtWrapper(pixmap)
 		iconLabel.SetAlignment(qt.AlignHCenter)
 		layout.AddWidget(iconLabel.QWidget)
 	}
@@ -679,7 +679,7 @@ func (w *mainWindow) showAbout() {
 	metadata.OnLinkActivated(func(link string) {
 		defer w.recoverCallback()
 		url := qt.NewQUrl3(link)
-		defer url.Delete()
+		defer deleteQtWrapper(url)
 		if !qt.QDesktopServices_OpenUrl(url) {
 			showOpenPathError("Open Project Website", link)
 		}
@@ -700,7 +700,7 @@ func (w *mainWindow) restoreWindowState() {
 		return
 	}
 	validVersion := version.IsValid() && version.ToInt() == settingsVersion
-	version.Delete()
+	deleteQtWrapper(version)
 	if !validVersion {
 		return
 	}
@@ -708,13 +708,13 @@ func (w *mainWindow) restoreWindowState() {
 		if data := geometry.ToByteArray(); len(data) != 0 {
 			w.main.RestoreGeometry(data)
 		}
-		geometry.Delete()
+		deleteQtWrapper(geometry)
 	}
 	if splitter := settingsValue(w.settings, "mainWindow/splitter"); splitter != nil {
 		if data := splitter.ToByteArray(); len(data) != 0 {
 			w.splitter.RestoreState(data)
 		}
-		splitter.Delete()
+		deleteQtWrapper(splitter)
 	}
 	w.main.SetMinimumSize2(720, 480)
 	w.list.SetMinimumWidth(240)
@@ -767,7 +767,7 @@ func (w *mainWindow) beginShutdown(exitCode int) {
 					w.logger.Error("gui shutdown: %v", err)
 					exitCode = 2
 				}
-				w.main.Delete()
+				deleteQtWrapper(w.main)
 				qt.QCoreApplication_ExitWithRetcode(exitCode)
 			})
 		}()
@@ -795,18 +795,18 @@ func (w *mainWindow) recoverCallback() {
 func setActionShortcut(action *qt.QAction, shortcut string) {
 	sequence := qt.NewQKeySequence2(shortcut)
 	action.SetShortcut(sequence)
-	sequence.Delete()
+	deleteQtWrapper(sequence)
 }
 
 func settingsValue(settings *qt.QSettings, key string) *qt.QVariant {
 	view := qt.NewQAnyStringView3(key)
-	defer view.Delete()
+	defer deleteQtWrapper(view)
 	return settings.ValueWithKey(*view)
 }
 
 func settingsSetValue(settings *qt.QSettings, key string, value *qt.QVariant) {
 	view := qt.NewQAnyStringView3(key)
 	settings.SetValue(*view, value)
-	view.Delete()
-	value.Delete()
+	deleteQtWrapper(view)
+	deleteQtWrapper(value)
 }

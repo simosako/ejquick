@@ -46,21 +46,23 @@ func Run(options Options) (exitCode int) {
 	if len(arguments) == 0 {
 		arguments = []string{"ejquick-gui"}
 	}
-	application := qt.NewQApplication(arguments)
-	defer application.Delete()
-
+	// Wayland and portal integrations consume application identity during
+	// QApplication construction.
 	qt.QCoreApplication_SetOrganizationName("simosako")
 	qt.QCoreApplication_SetOrganizationDomain("github.com/simosako")
 	qt.QCoreApplication_SetApplicationName("ejquick")
 	qt.QCoreApplication_SetApplicationVersion(buildinfo.Version)
 	qt.QGuiApplication_SetApplicationDisplayName(productName)
 	qt.QGuiApplication_SetDesktopFileName(applicationID)
+
+	application := qt.NewQApplication(arguments)
+	defer deleteQtWrapper(application)
 	qt.QGuiApplication_SetQuitOnLastWindowClosed(false)
 	logger.Debug("gui startup: platform=%q QT_QPA_PLATFORM=%q QT_IM_MODULE=%q",
 		qt.QGuiApplication_PlatformName(), os.Getenv("QT_QPA_PLATFORM"), os.Getenv("QT_IM_MODULE"))
 
 	icon := qt.QIcon_FromTheme("accessories-dictionary")
-	defer icon.Delete()
+	defer deleteQtWrapper(icon)
 	if !icon.IsNull() {
 		qt.QGuiApplication_SetWindowIcon(icon)
 	}

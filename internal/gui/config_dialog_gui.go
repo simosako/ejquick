@@ -57,7 +57,7 @@ func showConfigErrorDialog(category startup.ConfigCategory, path string, logger 
 
 func executeConfigErrorDialog(message startup.ConfigMessage, path string) configDialogChoice {
 	box := qt.NewQMessageBox3(qt.QMessageBox__Critical, "EJQuick Configuration", message.Text)
-	defer box.Delete()
+	defer deleteQtWrapper(box)
 	box.SetTextFormat(qt.PlainText)
 	box.SetTextInteractionFlags(qt.TextSelectableByMouse | qt.TextSelectableByKeyboard)
 	if path != "" {
@@ -102,7 +102,7 @@ func openLocalPath(path string) bool {
 		return false
 	}
 	url := qt.QUrl_FromLocalFile(path)
-	defer url.Delete()
+	defer deleteQtWrapper(url)
 	return qt.QDesktopServices_OpenUrl(url)
 }
 
@@ -112,7 +112,7 @@ func showOpenPathError(title, path string) {
 		text += "\n\n" + path
 	}
 	box := qt.NewQMessageBox3(qt.QMessageBox__Critical, title, text)
-	defer box.Delete()
+	defer deleteQtWrapper(box)
 	box.SetTextFormat(qt.PlainText)
 	box.SetTextInteractionFlags(qt.TextSelectableByMouse | qt.TextSelectableByKeyboard)
 	box.Exec()
