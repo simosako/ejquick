@@ -108,11 +108,13 @@ jobs:
           target: desktop
           arch: gcc_64
           dir: ${{ runner.temp }}/qt
-          modules: qtwayland
+          modules: qtwaylandcompositor
           install-deps: true
           cache: true
           cache-key-prefix: ejquick-qt
-          aqtversion: '==3.3.*'
+          # Qt 6.11 changed the online SDK directory layout. Pin aqtinstall
+          # to the upstream commit that added support for that layout.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74
 
       - name: Install Wayland test dependencies
         run: |
