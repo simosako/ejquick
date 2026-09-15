@@ -10,8 +10,10 @@ fi
 gui_binary=$1
 config_path=$2
 test_root=$3
-runtime_dir=$test_root/runtime
 
+mkdir -p -- "$test_root"
+test_root=$(cd -- "$test_root" && pwd -P)
+runtime_dir=$test_root/runtime
 mkdir -p -- "$runtime_dir" "$test_root/state"
 chmod 700 "$runtime_dir"
 
