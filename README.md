@@ -74,6 +74,23 @@ tmp/ejquick-gui
 v0.14.0, and Go 1.27.1. The desktop must provide a font with CJK glyphs; EJQuick
 uses the system font and font fallback without bundling or overriding fonts.
 
+Create the relocatable Linux GUI archive with:
+
+```bash
+make package-gui-linux \
+  QT_PREFIX=/path/to/qt \
+  QT_PKG_CONFIG_PATH=/path/to/qt/lib/pkgconfig \
+  FCITX5_PLUGIN=/path/to/qt-compatible/libfcitx5platforminputcontextplugin.so
+```
+
+The target writes `tmp/dist/ejquick-gui_<version>_linux_amd64.tar.zst` and
+bundles Qt libraries, Wayland/XCB platform plugins, Compose/IBus/Fcitx5 input
+context plugins, desktop metadata, and runtime license notices. Fcitx5 is
+built separately from Qt, so `FCITX5_PLUGIN` must point to a plugin built for
+the exact Qt version used for packaging when it is not under Qt's plugin
+directory. Host glibc, display-server, graphics, font, DBus, and input-method
+daemon libraries are intentionally not bundled.
+
 The self-contained Linux archive is designed to run `bin/ejquick-gui` directly.
 Its optional `install-desktop.sh` and `uninstall-desktop.sh` scripts only add or
 remove the per-user desktop menu entry. If the extracted directory is moved,
