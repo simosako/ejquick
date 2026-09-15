@@ -25,7 +25,9 @@ type Options struct {
 	Arguments    []string
 	ConfigPath   string
 	ExplicitPath bool
-	Logger       *logging.Logger
+	// SmokeTest runs a bounded synthetic UI flow for CI verification.
+	SmokeTest bool
+	Logger    *logging.Logger
 }
 
 // Run initializes QApplication once, loads configuration and databases, and
@@ -80,6 +82,9 @@ func Run(options Options) (exitCode int) {
 
 	window := newMainWindow(loaded.Config, databases, logger, icon)
 	window.show()
+	if options.SmokeTest {
+		window.startSmokeTest()
+	}
 	exitCode = qt.QApplication_Exec()
 	logger.Debug("gui shutdown: event loop exited code=%d os=%s", exitCode, runtime.GOOS)
 	return exitCode

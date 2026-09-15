@@ -25,6 +25,7 @@ func main() {
 		Arguments:    []string{os.Args[0]},
 		ConfigPath:   opts.configPath,
 		ExplicitPath: opts.configPathSet,
+		SmokeTest:    os.Getenv("EJQUICK_GUI_SMOKE_TEST") == "1",
 		Logger:       logger,
 	})
 	if err := logger.Close(); err != nil {

@@ -65,6 +65,7 @@ type mainWindow struct {
 	buildProcess  *buildprocess.Process
 	buildWorkers  sync.WaitGroup
 	shutdownOnce  sync.Once
+	smoke         *guiSmokeState
 }
 
 func newMainWindow(cfg *config.Config, databases *startup.Databases, logger *logging.Logger, icon *qt.QIcon) *mainWindow {

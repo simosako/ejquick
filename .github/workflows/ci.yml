@@ -152,3 +152,34 @@ jobs:
           make vet-gui \
             QT_PREFIX="$QT_ROOT_DIR" \
             QT_PKG_CONFIG_PATH="$QT_ROOT_DIR/lib/pkgconfig"
+
+      - name: Create synthetic GUI database
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_dir="${GITHUB_WORKSPACE}/tmp/gui-smoke"
+          mkdir -p "$smoke_dir"
+          printf '\x81\xa1ejquick-smoke : artificial GUI smoke entry\r\n' \
+            > "$smoke_dir/EIJIRO1-0.TXT"
+          tmp/ejquick-build \
+            --type eiwa \
+            --output "$smoke_dir/eiwa.sqlite3" \
+            "$smoke_dir/EIJIRO1-0.TXT"
+          cat > "$smoke_dir/config.toml" <<'EOF'
+          [eiwa]
+          database = "eiwa.sqlite3"
+
+          [waei]
+          database = "missing-waei.sqlite3"
+
+          [search]
+          default_dictionary = "eiwa"
+          max_results = 50
+          EOF
+
+      - name: Run Weston Wayland smoke test
+        run: |
+          packaging/linux/test-wayland.sh \
+            tmp/ejquick-gui \
+            tmp/gui-smoke/config.toml \
+            tmp/gui-smoke
