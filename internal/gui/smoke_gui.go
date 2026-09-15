@@ -4,6 +4,7 @@ package gui
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -112,6 +113,11 @@ func (w *mainWindow) verifySmokeResult(snapshot controller.Snapshot) error {
 		return fmt.Errorf("body = %q, want %q", w.body.ToPlainText(), guiSmokeBody)
 	}
 	w.copyEntireEntry()
+	if os.Getenv("EJQUICK_GUI_SMOKE_SKIP_CLIPBOARD") == "1" {
+		// Weston headless intentionally exposes no wl_seat, so clipboard contents
+		// cannot be owned or read there. A real desktop smoke test covers this.
+		return nil
+	}
 	wantClipboard := guiSmokeQuery + "\n" + guiSmokeBody
 	if got := qt.QGuiApplication_Clipboard().Text(); got != wantClipboard {
 		return fmt.Errorf("clipboard = %q, want %q", got, wantClipboard)

@@ -24,6 +24,7 @@ export QT_QPA_PLATFORM=wayland
 export QT_IM_MODULE=${QT_IM_MODULE:-compose}
 export QT_DEBUG_PLUGINS=1
 export EJQUICK_GUI_SMOKE_TEST=1
+export EJQUICK_GUI_SMOKE_SKIP_CLIPBOARD=1
 unset DISPLAY
 rm -f -- "$runtime_dir/$WAYLAND_DISPLAY" "$test_root/weston.log" \
 	"$test_root/gui.stdout.log" "$test_root/gui.stderr.log" \
