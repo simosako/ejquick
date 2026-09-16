@@ -1,21 +1,53 @@
 # EJQuick GUI 初期設計書
 
-> Status: Draft  
-> 最終更新: 2026-09-13  
-> 対象: EJQuick のデスクトップ GUI フロントエンド
+> **Status:** Major features implemented / initial Linux GUI release engineering in progress
+>
+> **最終更新:** 2026-09-16
+>
+> **対象:** EJQuickのデスクトップGUIフロントエンド
+>
+> **実装状況の基準:** `main` commit `733bcd1` (`v0.3.1`)
+
+## 0. 現在の開発状況
+
+本書のD1〜D50に記録した設計判断はすべて完了している。GUIの主要機能も実装済みであり、現在は新しい画面機能を設計する段階ではなく、初期Linux GUIを正式な配布物として完成させる段階にある。
+
+実装済み:
+
+- M1: Qt Widgets + Go + MIQTによるGUI skeletonと独立した`ejquick-gui` entry point
+- M2: 2-pane検索画面、非同期incremental search、辞書切り替え、keyboard / IME / clipboard対応
+- Version付きBuilder machine protocol、cancel、hard-kill、一時DB cleanup、output lock
+- GUI Builder dialog、進捗・失敗表示、build後のDB再open
+- Linux desktop登録 / 解除script
+- Weston headless Wayland smoke test
+- Self-contained Linux GUI `tar.zst`を作成するpackage script
+
+初期Linux GUI releaseに向けて未完了:
+
+- 固定release環境で完成packageを作成し、その展開物をCIでtestする
+- Package外のQtへfallbackせず、同梱QPA / input context pluginだけで動作することを検査する
+- glibc 2.34 baselineでbuild / runtime互換性を確認する
+- KWin + Fcitx5およびMutter + IBusの実desktop smoke testを記録する
+- Dependency manifest、license検査、clean-environment testを完成させる
+- GUI packageをchecksum対象に含め、GitHub Releasesへ公開する
+- 起動時間、RSS / PSS、検索latency、package sizeの初回baselineを記録する
+
+`v0.3.1`時点のGitHub ReleasesにはPure Go版の`ejquick` / `ejquick-build`成果物だけがあり、GUI packageはまだ公開されていない。したがって、GUI sourceとlocal package作成機能は存在するが、D34で定義する初期Linux GUI releaseは未完了である。
+
+詳細な調査時点の記録は[`development_status_2026-09-16.md`](development_status_2026-09-16.md)を参照する。この節は現在地の要約であり、D1〜D50は採用理由と不採用案を残すdecision logとして維持する。
 
 ---
 
 ## 1. この文書の位置付け
 
-本書は、既存の TUI / CLI に加えて開発する EJQuick GUI の設計判断を記録する。
+本書は、既存の TUI / CLI に加えて開発したEJQuick GUIの設計判断と、初期Linux GUI releaseの完了条件を記録する。
 辞書データ形式、SQLite schema、正規化、検索戦略などの共通仕様は
-[`initial_design.md`](initial_design.md) を正とし、本書では GUI 固有の要件と、今後決定する事項を扱う。
+[`initial_design.md`](initial_design.md) を正とし、本書ではGUI固有の要件、採用した設計判断、その実装・release完了条件を扱う。
 
 GUI は既存 TUI の置き換えではなく、同じ辞書データを利用する追加のフロントエンドとする。
 TUI / CLI と `ejquick-build` は引き続き提供する。
 
-設計項目は次の状態で管理する。
+設計検討時には、項目を次の状態で管理した。現時点ではD1〜D50はすべて決定済みであり、以下の区分はdecision log内の履歴を読むために残す。
 
 - **決定済み**: 実装の前提とする
 - **暫定**: prototype や計測結果を見て確定する
@@ -43,6 +75,8 @@ Go + MIQT を選ぶ理由は、既存の検索、正規化、設定、logging pa
 - macOS
 - Windows
 
+これは長期的なGUIの対応対象である。調査基準コミット時点で実装・検証を進めている正式な初期targetはLinux `x86_64` / native Waylandだけであり、Windows / macOS GUIは初期Linux GUI releaseの完了後に扱う。
+
 ただし、採用する Qt 6 version が公式対応していない OS / CPU architecture は製品の対応対象に含めない。
 「動作する可能性があること」と「公式対応構成であること」は区別し、EJQuick の配布物は原則として後者だけを対象とする。
 
@@ -60,7 +94,7 @@ Release binary は RHEL 9 系相当の glibc 2.34 環境で build し、それ�
 5. OS の標準的な keyboard、IME、clipboard、accessibility と自然に連携する
 
 「軽量」は感覚評価だけにせず、起動時間、memory、package size、検索 latency を継続的に計測する。
-測定環境と結果の記録方法は prototype 後に確定する。D8どおり固定の合格値は設けない。
+D8どおり固定の合格値は設けない。初回releaseの測定環境と結果の正式な記録は、完成packageのCI / release工程とともに整備する未完了項目である。
 
 ### 2.4 配布形態
 
@@ -321,7 +355,9 @@ Qt Widgets と Qt Quick は open-source 利用時に LGPLv3 / GPLv2 の選択肢
 
 ---
 
-## 8. 最初の milestone
+## 8. 初期Linux GUI release milestone
+
+> **現状:** 検索GUI、Builder UI、desktop integration、package作成scriptは実装済み。完成packageのCI検証、互換性・license・実desktop検証、GitHub Releasesへの公開は未完了。
 
 Linux / Wayland版の最初の公開releaseには、D34で決定した検索GUI、Builder UI、self-contained packageを含める。
 
@@ -340,9 +376,9 @@ System tray、global shortcut、自動update、高度なtheme、検索履歴、X
 
 ---
 
-## 9. 次に決定する詳細設計と選択肢
+## 9. 詳細設計のdecision log
 
-以下は優先順に検討する。D1 と D2 は決定済みであり、採用理由と比較した選択肢を decision log として残す。
+以下は実装前に検討したD1〜D50のdecision logである。すべて決定済みであり、採用理由、比較した選択肢、実装・test上の制約を後から確認できるよう残す。
 
 ### D1. View technology
 
@@ -3250,7 +3286,7 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 
 ---
 
-## 10. 推奨する決定順序
+## 10. 決定結果と現在の次作業
 
 決定済み:
 
@@ -3315,12 +3351,42 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 - 両辞書unavailable時のcombo / Dictionary menu disabled、成功後DB openのtiming統一等の小さなgap
 - D47の内部分類closed setは簡素化のため削除し、wrapped errorをそのまま記録する方針へ変更
 
-次の決定順序:
+### 10.1 実装milestoneの到達状況
 
-1. 実装milestoneの確定と実装開始
+実装は当初想定した次の順序で進み、package stagingまで到達している。
 
-次に Qt Widgets + Go + MIQT で最小 window を作り、起動時間、memory、Wayland、IME、deployment を検証する。
-検索画面を作り込む前に、既存検索 service の非同期呼び出しと Qt main thread への安全な結果反映まで確認する。
+| 内部milestone | 状況 | 主な実装 |
+|---|---|---|
+| M1: Minimal Qt window | 完了 | `ejquick-gui`、Qt Widgets / MIQT、`gui` build tag |
+| M2: Search GUI | 完了 | 2-pane window、非同期検索、main-thread dispatch、IME / keyboard / clipboard |
+| Builder protocol | 完了 | Version handshake、progress、cancel、hard kill、temporary cleanup、output lock |
+| Builder dialog | 完了 | Setup、progress、failure recovery、build後のDB再open |
+| Linux desktop integration | 完了 | Desktop entry、登録 / 解除script |
+| Package staging | Script実装済み | Self-contained `tar.zst`作成、Qt / Fcitx5 runtime staging |
+| Packaged release verification | 未完了 | 完成package CI、clean environment、glibc baseline、実desktop / IME、license検査 |
+| GitHub ReleasesへのGUI公開 | 未完了 | GUI artifact、checksum、tag release連携 |
+
+M1 / M2より前を前提にしたprototype作業へ戻る必要はない。検索GUIやBuilderへ新機能を追加する前に、現在の実装を完成packageとして検証・公開する。
+
+### 10.2 次に行う作業
+
+優先順は次のとおりとする。
+
+1. D34〜D36のrelease完了条件を短い運用checklistへ整理する
+2. 固定したQt 6.11.2 / MIQT v0.14.0 / Go 1.27.1環境で`make package-gui-linux`をCI実行する
+3. 作成したarchiveを展開し、package内runtimeと同梱`ejquick-build`だけを使うWayland E2E testを行う
+4. glibc 2.34 baselineとdependency closureを検査し、dependency / license manifestを残す
+5. KWin + Fcitx5、Mutter + IBusの実desktop checklistを実施・記録する
+6. Startup time、RSS / PSS、検索latency、圧縮時 / 展開時sizeの初回baselineを記録する
+7. GUI archiveをchecksum対象に加え、tag releaseからGitHub Releasesへ公開する
+
+この工程が完了するまで、Windows / macOS GUI、Linux arm64 GUI、X11正式対応、system tray、global shortcut、検索履歴、自動update、独自theme、翻訳、AppImage / Flatpak / native packageは次段階へ延期する。
+
+### 10.3 Build環境に関する運用上の注意
+
+調査に使用したLinux VPSはmemoryが6 GiBであり、Qt / MIQT周辺のcompileでmemory不足になる可能性が高い。`make build-gui`、`make test-gui`、`make package-gui-linux`は、原則として十分なmemoryを持つGitHub Actionsまたは専用build環境で実行する。
+
+VPSではPure Go test、設計・scriptの静的確認、既存artifactの検査を中心とし、Qt / MIQTのfull rebuildを通常の確認手順に含めない。
 
 ---
 
