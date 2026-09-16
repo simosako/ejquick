@@ -203,11 +203,11 @@ jobs:
           dnf install -y dnf-plugins-core
           dnf config-manager --set-enabled crb
           dnf install -y epel-release
+          dnf swap -y coreutils-single coreutils
           dnf install -y \
             alsa-lib \
             binutils \
             cmake \
-            coreutils \
             dbus-libs \
             extra-cmake-modules \
             findutils \
