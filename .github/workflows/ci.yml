@@ -352,6 +352,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$SYSTEM_PATH:$PATH"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           version=$(git describe --tags --always --dirty)
           [[ $version != *-dirty ]]
           make package-gui-linux \
