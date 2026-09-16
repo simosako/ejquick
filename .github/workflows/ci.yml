@@ -194,6 +194,7 @@ jobs:
       AQT_COMMIT: 8c3695d4a4e1ceabf6a74dc6c79681656dc6b74
       FCITX5_QT_COMMIT: 272b6b9eba97f0ed97e8a5caaf0bb22c6123f462
       FCITX5_QT_VERSION: 5.1.15
+      ICU_VERSION: "73.2"
       QT_VERSION: 6.11.2
       ROCKY_IMAGE: rockylinux/rockylinux@sha256:91bbb8eb52ca462611c1f9ce5c4cede4172a31bfe64f336e82f29648694a3cfe
       SYSTEM_PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -344,6 +345,38 @@ jobs:
           {
             echo "FCITX5_PLUGIN=$plugin"
             echo "FCITX5_LIBDIR=$install_dir/lib"
+            echo "FCITX5_LICENSES_DIR=$source_dir/LICENSES"
+            echo "FCITX5_QT_SOURCE_REV=$(git -C "$source_dir" rev-parse HEAD)"
+          } >> "$GITHUB_ENV"
+
+      - name: Collect runtime license material
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -euo pipefail
+          export PATH="$SYSTEM_PATH:$PATH"
+          license_root="$RUNNER_TEMP/runtime-licenses"
+          mkdir -p "$license_root/Qt"
+          git clone --depth 1 --branch "v$QT_VERSION" --filter=blob:none --sparse \
+            https://github.com/qt/qtbase.git "$license_root/qtbase-source"
+          git -C "$license_root/qtbase-source" sparse-checkout set LICENSES
+          git clone --depth 1 --branch "v$QT_VERSION" --filter=blob:none --sparse \
+            https://github.com/qt/qtwayland.git "$license_root/qtwayland-source"
+          git -C "$license_root/qtwayland-source" sparse-checkout set LICENSES
+          git clone --depth 1 --branch release-73-2 --filter=blob:none --sparse \
+            https://github.com/unicode-org/icu.git "$license_root/icu-source"
+          git -C "$license_root/icu-source" sparse-checkout set icu4c/LICENSE
+          cp -a "$license_root/qtbase-source/LICENSES" "$license_root/Qt/qtbase"
+          cp -a "$license_root/qtwayland-source/LICENSES" "$license_root/Qt/qtwayland"
+          test -f "$license_root/Qt/qtbase/LGPL-3.0-only.txt"
+          test -f "$license_root/Qt/qtbase/GPL-3.0-only.txt"
+          test -f "$FCITX5_LICENSES_DIR/LGPL-2.1-or-later.txt"
+          test -s "$license_root/icu-source/icu4c/LICENSE"
+          {
+            echo "QT_LICENSES_DIR=$license_root/Qt"
+            echo "ICU_LICENSE_FILE=$license_root/icu-source/icu4c/LICENSE"
+            echo "QTBASE_SOURCE_REV=$(git -C "$license_root/qtbase-source" rev-parse HEAD)"
+            echo "QTWAYLAND_SOURCE_REV=$(git -C "$license_root/qtwayland-source" rev-parse HEAD)"
+            echo "ICU_SOURCE_REV=$(git -C "$license_root/icu-source" rev-parse HEAD)"
           } >> "$GITHUB_ENV"
 
       - name: Build Linux GUI package
@@ -360,7 +393,15 @@ jobs:
             QT_PREFIX="$QT_ROOT_DIR" \
             QT_PKG_CONFIG_PATH="$QT_ROOT_DIR/lib/pkgconfig" \
             FCITX5_PLUGIN="$FCITX5_PLUGIN" \
-            FCITX5_LIBDIR="$FCITX5_LIBDIR"
+            FCITX5_LIBDIR="$FCITX5_LIBDIR" \
+            QT_LICENSES_DIR="$QT_LICENSES_DIR" \
+            FCITX5_LICENSES_DIR="$FCITX5_LICENSES_DIR" \
+            ICU_LICENSE_FILE="$ICU_LICENSE_FILE" \
+            ICU_VERSION="$ICU_VERSION" \
+            QTBASE_SOURCE_REV="$QTBASE_SOURCE_REV" \
+            QTWAYLAND_SOURCE_REV="$QTWAYLAND_SOURCE_REV" \
+            FCITX5_QT_SOURCE_REV="$FCITX5_QT_SOURCE_REV" \
+            ICU_SOURCE_REV="$ICU_SOURCE_REV"
           archive="$GITHUB_WORKSPACE/tmp/dist/ejquick-gui_${version}_linux_amd64.tar.zst"
           test -f "$archive"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -396,6 +437,10 @@ jobs:
             echo "miqt=$(go list -m -f '{{.Version}}' github.com/mappu/miqt)"
             echo "fcitx5_qt=$FCITX5_QT_VERSION"
             echo "fcitx5_qt_commit=$FCITX5_QT_COMMIT"
+            echo "qtbase_source_commit=$QTBASE_SOURCE_REV"
+            echo "qtwayland_source_commit=$QTWAYLAND_SOURCE_REV"
+            echo "icu=$ICU_VERSION"
+            echo "icu_source_commit=$ICU_SOURCE_REV"
             echo "compiler=$(gcc -dumpfullversion -dumpversion)"
           } > "$archive.build-info.txt"
 

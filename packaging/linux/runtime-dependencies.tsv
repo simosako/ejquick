@@ -1,0 +1,47 @@
+# SONAME_PATTERN	DISPOSITION	COMPONENT
+libQt6*.so.*	bundle	Qt 6 runtime
+libFcitx5Qt*.so.*	bundle	Fcitx5 Qt runtime
+libicu*.so.*	bundle	ICU runtime supplied with Qt
+ld-linux-x86-64.so.2	host	glibc ELF loader
+libc.so.6	host	glibc
+libdbus-1.so.3	host	D-Bus
+libEGL.so.1	host	graphics driver interface
+libfontconfig.so.1	host	fontconfig
+libfreetype.so.6	host	FreeType
+libgcc_s.so.1	host	GCC runtime
+libGL.so.1	host	OpenGL dispatch
+libGLX.so.0	host	OpenGL GLX dispatch
+libglib-2.0.so.0	host	GLib
+libgthread-2.0.so.0	host	GLib threading
+libICE.so.6	host	X11 ICE
+libm.so.6	host	glibc math
+libOpenGL.so.0	host	OpenGL dispatch
+libresolv.so.2	host	glibc resolver
+libSM.so.6	host	X11 session management
+libstdc++.so.6	host	GCC C++ runtime
+libwayland-client.so.0	host	Wayland client
+libwayland-cursor.so.0	host	Wayland cursor
+libX11.so.6	host	X11 client
+libX11-xcb.so.1	host	X11/XCB bridge
+libXau.so.6	host	X11 authorization
+libXdmcp.so.6	host	X display manager protocol
+libxcb.so.1	host	XCB client
+libxcb-cursor.so.0	host	XCB cursor
+libxcb-icccm.so.4	host	XCB ICCCM
+libxcb-image.so.0	host	XCB image
+libxcb-keysyms.so.1	host	XCB key symbols
+libxcb-randr.so.0	host	XCB RandR
+libxcb-render.so.0	host	XCB Render
+libxcb-render-util.so.0	host	XCB Render utilities
+libxcb-shape.so.0	host	XCB Shape
+libxcb-shm.so.0	host	XCB shared memory
+libxcb-sync.so.1	host	XCB Sync
+libxcb-util.so.1	host	XCB utilities
+libxcb-xfixes.so.0	host	XCB XFixes
+libxcb-xkb.so.1	host	XCB keyboard
+libXext.so.6	host	X11 extensions
+libXrender.so.1	host	X11 Render
+libxkbcommon.so.0	host	XKB common
+libxkbcommon-x11.so.0	host	XKB common X11
+libz.so.1	host	zlib
+libzstd.so.1	host	zstd

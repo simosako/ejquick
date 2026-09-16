@@ -12,6 +12,9 @@ qt_pkg_config_path=${QT_PKG_CONFIG_PATH:-$qt_prefix/lib/pkgconfig}
 output_dir=${PACKAGE_OUTPUT_DIR:-$repository/tmp/dist}
 fcitx5_plugin=${FCITX5_PLUGIN:-}
 fcitx5_libdir=${FCITX5_LIBDIR:-}
+qt_licenses_dir=${QT_LICENSES_DIR:-}
+fcitx5_licenses_dir=${FCITX5_LICENSES_DIR:-}
+icu_license_file=${ICU_LICENSE_FILE:-}
 
 fail() {
 	printf 'package-gui-linux.sh: %s\n' "$*" >&2
@@ -33,6 +36,12 @@ require_command zstd
 [[ $(go env GOARCH) == amd64 ]] || fail "GOARCH must be amd64, got $(go env GOARCH)"
 [[ $version != */* && $version != *$'\n'* && $version != *$'\r'* ]] || fail 'VERSION contains an unsafe path character'
 [[ -d $qt_prefix ]] || fail "Qt prefix does not exist: $qt_prefix"
+[[ -n $qt_licenses_dir && -d $qt_licenses_dir ]] || fail 'QT_LICENSES_DIR must identify the reviewed Qt license directory'
+[[ -n $fcitx5_licenses_dir && -d $fcitx5_licenses_dir ]] || fail 'FCITX5_LICENSES_DIR must identify the Fcitx5 Qt license directory'
+[[ -n $icu_license_file && -f $icu_license_file ]] || fail 'ICU_LICENSE_FILE must identify the ICU license file'
+for variable in QTBASE_SOURCE_REV QTWAYLAND_SOURCE_REV FCITX5_QT_SOURCE_REV ICU_SOURCE_REV ICU_VERSION; do
+	[[ -n ${!variable:-} ]] || fail "$variable is required"
+done
 
 qtpaths=
 qtpath_candidates=(
@@ -153,6 +162,18 @@ cp -- "$repository/README.md" "$repository/LICENSE" "$repository/THIRD_PARTY_NOT
 chmod 0755 "$package_root/bin/ejquick-gui" "$package_root/bin/ejquick-build" \
 	"$package_root/install-desktop.sh" "$package_root/uninstall-desktop.sh"
 
+{
+	printf '# MODULE\tVERSION\n'
+	for binary in "$package_root/bin/ejquick-gui" "$package_root/bin/ejquick-build"; do
+		go version -m "$binary" | sed -n 's/^\tdep\t\([^\t]*\)\t\([^\t]*\).*/\1\t\2/p'
+	done
+} | sort -u >"$package_root/GO-DEPENDENCIES.tsv"
+while IFS=$'\t' read -r module module_version; do
+	[[ -n $module && $module != \#* ]] || continue
+	grep -Fq "  $module $module_version" "$package_root/THIRD_PARTY_NOTICES" || \
+		fail "THIRD_PARTY_NOTICES is missing a linked Go module: $module $module_version"
+done <"$package_root/GO-DEPENDENCIES.tsv"
+
 copy_plugin() {
 	local source=$1
 	local directory=$2
@@ -203,7 +224,7 @@ while (( ${#runtime_queue[@]} > 0 )); do
 	runtime_queue=("${runtime_queue[@]:1}")
 	while IFS= read -r needed; do
 		case $needed in
-		libQt6*.so.*|libFcitx5Qt*.so.*)
+		libQt6*.so.*|libFcitx5Qt*.so.*|libicu*.so.*)
 			if [[ -n ${copied_runtime_libraries[$needed]:-} ]]; then
 				continue
 			fi
@@ -218,58 +239,14 @@ while (( ${#runtime_queue[@]} > 0 )); do
 	done < <(readelf -d "$runtime_file" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')
 done
 
-if [[ -n ${QT_LICENSES_DIR:-} && -d $QT_LICENSES_DIR ]]; then
-	qt_licenses_dir=$QT_LICENSES_DIR
-else
-	qt_licenses_dir=
-	for candidate in "$qt_prefix/LICENSES" "$qt_prefix/../LICENSES"; do
-		if [[ -d $candidate ]]; then
-			qt_licenses_dir=$candidate
-			break
-		fi
-	done
-fi
-if [[ -n $qt_licenses_dir ]]; then
-	mkdir -p -- "$package_root/licenses/Qt"
-	cp -a -- "$qt_licenses_dir/." "$package_root/licenses/Qt/"
-fi
-
-qt_copyright=
-for candidate in \
-	"${QT_COPYRIGHT_FILE:-}" \
-	"$qt_prefix/LICENSE" \
-	"/usr/share/doc/libqt6gui6/copyright" \
-	"/usr/share/doc/libqt6gui6t64/copyright"; do
-	if [[ -n $candidate && -f $candidate ]]; then
-		qt_copyright=$candidate
-		break
-	fi
-done
-if [[ -n $qt_copyright ]]; then
-	cp -- "$qt_copyright" "$package_root/licenses/Qt-COPYRIGHT"
-fi
-
-fcitx_copyright=
-for candidate in \
-	"${FCITX5_COPYRIGHT_FILE:-}" \
-	"$fcitx5_libdir/../share/doc/libfcitx5-qt1/copyright" \
-	"/usr/share/doc/libfcitx5-qt1/copyright" \
-	"/usr/share/doc/libfcitx5-qt6/copyright"; do
-	if [[ -n $candidate && -f $candidate ]]; then
-		fcitx_copyright=$candidate
-		break
-	fi
-done
-if [[ -n $fcitx_copyright ]]; then
-	cp -- "$fcitx_copyright" "$package_root/licenses/Fcitx5-Qt-COPYRIGHT"
-fi
-
-if [[ -f /usr/share/common-licenses/LGPL-3 ]]; then
-	cp -- /usr/share/common-licenses/LGPL-3 "$package_root/licenses/LGPL-3.0"
-fi
-if [[ -f /usr/share/common-licenses/LGPL-2.1 ]]; then
-	cp -- /usr/share/common-licenses/LGPL-2.1 "$package_root/licenses/LGPL-2.1"
-fi
+mkdir -p -- "$package_root/licenses/Qt" "$package_root/licenses/Fcitx5-Qt" "$package_root/licenses/ICU"
+cp -a -- "$qt_licenses_dir/." "$package_root/licenses/Qt/"
+cp -a -- "$fcitx5_licenses_dir/." "$package_root/licenses/Fcitx5-Qt/"
+cp -- "$icu_license_file" "$package_root/licenses/ICU/LICENSE"
+[[ -f $package_root/licenses/Qt/qtbase/LGPL-3.0-only.txt ]] || fail 'Qt LGPL-3.0 license text is missing'
+[[ -f $package_root/licenses/Qt/qtbase/GPL-3.0-only.txt ]] || fail 'Qt GPL-3.0 license text is missing'
+[[ -f $package_root/licenses/Fcitx5-Qt/LGPL-2.1-or-later.txt ]] || fail 'Fcitx5 Qt LGPL-2.1 license text is missing'
+[[ -s $package_root/licenses/ICU/LICENSE ]] || fail 'ICU license text is empty'
 
 cat >"$package_root/licenses/GUI-RUNTIME-NOTICES.txt" <<EOF
 EJQuick Linux GUI runtime notice
@@ -279,22 +256,44 @@ EJQuick application code is distributed under the MIT License in ../LICENSE.
 Go dependency notices are in ../THIRD_PARTY_NOTICES.
 
 This package bundles Qt ${qt_version} shared libraries and Qt plugins. Qt is
-available under the GNU Lesser General Public License version 3 or the GNU
-General Public License version 2, subject to the module and source terms.
-Qt licensing information and third-party attributions are provided by the
-Qt installation when available in licenses/Qt or licenses/Qt-COPYRIGHT.
-The Qt source archive is available from:
-https://download.qt.io/official_releases/qt/${qt_version%.*}/${qt_version}/submodules/
+used under the GNU Lesser General Public License version 3. Qt license texts
+are provided in licenses/Qt. The libraries are dynamically linked and may be
+replaced with ABI-compatible modified builds. Corresponding source revisions
+are recorded in SOURCE-COMPONENTS.txt.
 
 The Fcitx5 Qt input context plugin is bundled as well. It is provided by
 fcitx5-qt and is licensed under the GNU Lesser General Public License 2.1 or
-later. Its source is available from:
-https://github.com/fcitx/fcitx5-qt
-See licenses/Fcitx5-Qt-COPYRIGHT when supplied by the build environment.
+later. Its license texts are in licenses/Fcitx5-Qt and its source revision is
+recorded in SOURCE-COMPONENTS.txt.
+
+This package also bundles ICU ${ICU_VERSION} shared libraries distributed with
+the Qt SDK. The ICU license is in licenses/ICU/LICENSE and its source revision
+is recorded in SOURCE-COMPONENTS.txt.
 
 This archive does not bundle glibc, the ELF loader, Wayland/X11 libraries,
 DBus, XKB, font, OpenGL/EGL, graphics-driver, or input-method daemon files.
 Those components remain the responsibility of the host system.
+EOF
+
+cat >"$package_root/SOURCE-COMPONENTS.txt" <<EOF
+Bundled runtime source references
+=================================
+
+Qt Base ${qt_version}
+Revision: ${QTBASE_SOURCE_REV}
+Source: https://github.com/qt/qtbase/tree/${QTBASE_SOURCE_REV}
+
+Qt Wayland ${qt_version}
+Revision: ${QTWAYLAND_SOURCE_REV}
+Source: https://github.com/qt/qtwayland/tree/${QTWAYLAND_SOURCE_REV}
+
+Fcitx5 Qt ${FCITX5_QT_VERSION:-unknown}
+Revision: ${FCITX5_QT_SOURCE_REV}
+Source: https://github.com/fcitx/fcitx5-qt/tree/${FCITX5_QT_SOURCE_REV}
+
+ICU ${ICU_VERSION}
+Revision: ${ICU_SOURCE_REV}
+Source: https://github.com/unicode-org/icu/tree/${ICU_SOURCE_REV}
 EOF
 
 validate_needed_libraries() {
@@ -302,7 +301,7 @@ validate_needed_libraries() {
 	local needed
 	while IFS= read -r needed; do
 		case $needed in
-		libQt6*.so.*|libFcitx5Qt*.so.*)
+		libQt6*.so.*|libFcitx5Qt*.so.*|libicu*.so.*)
 			[[ -f $package_root/lib/$needed ]] || fail "staged file has an unstaged dependency: $file -> $needed"
 			;;
 		esac
@@ -315,6 +314,8 @@ for file in "$package_root/lib"/*.so.* "$package_root/plugins/platforms"/*.so \
 	[[ -f $file ]] || continue
 	validate_needed_libraries "$file"
 done
+
+"$script_dir/generate-runtime-dependencies.sh" "$package_root" "$package_root/DEPENDENCIES.tsv"
 
 if ! readelf -d "$package_root/bin/ejquick-gui" | grep -Eq 'RUNPATH.*\$ORIGIN/../lib|RPATH.*\$ORIGIN/../lib'; then
 	fail 'ejquick-gui does not contain the expected relative library path'
