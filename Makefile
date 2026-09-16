@@ -8,7 +8,7 @@ QT_PKG_CONFIG_PATH ?= $(QT_PREFIX)/lib/pkgconfig
 GUI_ENV := CGO_ENABLED=1 PKG_CONFIG_PATH="$(QT_PKG_CONFIG_PATH):$${PKG_CONFIG_PATH}"
 
 # Scratch binaries always go to tmp/ (never committed, see AGENTS.md).
-.PHONY: build build-gui package-gui-linux test test-gui test-race test-desktop vet vet-gui fmt fmt-check tidy-check bench bench-smoke clean release-check
+.PHONY: build build-gui package-gui-linux verify-gui-package test test-gui test-race test-desktop vet vet-gui fmt fmt-check tidy-check bench bench-smoke clean release-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o tmp/ejquick ./cmd/ejquick
@@ -22,6 +22,10 @@ package-gui-linux:
 	QT_PREFIX="$(QT_PREFIX)" QT_PKG_CONFIG_PATH="$(QT_PKG_CONFIG_PATH)" \
 	FCITX5_PLUGIN="$(FCITX5_PLUGIN)" FCITX5_LIBDIR="$(FCITX5_LIBDIR)" VERSION="$(VERSION)" \
 		packaging/linux/package-gui-linux.sh
+
+verify-gui-package:
+	test -n "$(GUI_PACKAGE)" || { echo "GUI_PACKAGE is required" >&2; exit 1; }
+	packaging/linux/verify-gui-package.sh "$(GUI_PACKAGE)" "$(VERSION)"
 
 test:
 	go test ./...

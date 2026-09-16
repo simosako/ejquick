@@ -183,3 +183,216 @@ jobs:
             tmp/ejquick-gui \
             tmp/gui-smoke/config.toml \
             tmp/gui-smoke
+
+  gui-package:
+    name: GUI package (Rocky Linux 9.6 / Qt 6.11.2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: rockylinux/rockylinux@sha256:91bbb8eb52ca462611c1f9ce5c4cede4172a31bfe64f336e82f29648694a3cfe
+    env:
+      AQT_COMMIT: 8c3695d4a4e1ceabf6a74dc6c79681656dc6b74
+      FCITX5_QT_COMMIT: 272b6b9eba97f0ed97e8a5caaf0bb22c6123f462
+      FCITX5_QT_VERSION: 5.1.15
+      QT_VERSION: 6.11.2
+      ROCKY_IMAGE: rockylinux/rockylinux@sha256:91bbb8eb52ca462611c1f9ce5c4cede4172a31bfe64f336e82f29648694a3cfe
+    steps:
+      - name: Install system build dependencies
+        run: |
+          dnf install -y dnf-plugins-core
+          dnf config-manager --set-enabled crb
+          dnf install -y epel-release
+          dnf install -y \
+            alsa-lib \
+            binutils \
+            cmake \
+            dbus-libs \
+            extra-cmake-modules \
+            findutils \
+            fontconfig \
+            freetype \
+            gcc \
+            gcc-c++ \
+            git \
+            glib2 \
+            libICE \
+            libSM \
+            libX11 \
+            libX11-xcb \
+            libXext \
+            libXrender \
+            libglvnd-egl \
+            libglvnd-glx \
+            libxcb \
+            libxkbcommon \
+            libxkbcommon-devel \
+            make \
+            mesa-libGL \
+            ninja-build \
+            openssl-libs \
+            patch \
+            pkgconf-pkg-config \
+            tar \
+            wayland-devel \
+            xcb-util \
+            xcb-util-cursor \
+            xcb-util-image \
+            xcb-util-keysyms \
+            xcb-util-renderutil \
+            xcb-util-wm \
+            zlib \
+            zstd
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify fixed baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.34"
+          test "$(go env GOVERSION)" = "go1.27.1"
+          test "$(go list -m -f '{{.Version}}' github.com/mappu/miqt)" = "v0.14.0"
+
+      - name: Install Qt 6.11.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "git+https://github.com/miurahr/aqtinstall.git@${AQT_COMMIT}"
+          cd "$RUNNER_TEMP"
+          aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 \
+            --outputdir "$RUNNER_TEMP/Qt" \
+            --modules qtwaylandcompositor
+          qt_root="$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64"
+          qtpaths_bin=
+          for candidate in "$qt_root/bin/qtpaths6" "$qt_root/bin/qtpaths"; do
+            if [[ -x $candidate ]]; then
+              qtpaths_bin=$candidate
+              break
+            fi
+          done
+          test -n "$qtpaths_bin"
+          test -f "$qt_root/lib/pkgconfig/Qt6Widgets.pc"
+          test -f "$qt_root/plugins/platforms/libqwayland.so"
+          {
+            echo "QT_ROOT_DIR=$qt_root"
+            echo "QT_PATHS=$qtpaths_bin"
+            echo "PATH=$qt_root/bin:$PATH"
+            echo "LD_LIBRARY_PATH=$qt_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            echo "PKG_CONFIG_PATH=$qt_root/lib/pkgconfig"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify Qt installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(pkg-config --modversion Qt6Core)" = "$QT_VERSION"
+          test "$(pkg-config --modversion Qt6Gui)" = "$QT_VERSION"
+          test "$(pkg-config --modversion Qt6Widgets)" = "$QT_VERSION"
+          test "$("$QT_PATHS" -query QT_VERSION)" = "$QT_VERSION"
+
+      - name: Build Fcitx5 Qt input context plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/fcitx5-qt"
+          build_dir="$RUNNER_TEMP/fcitx5-qt-build"
+          install_dir="$RUNNER_TEMP/fcitx5-qt-install"
+          git init "$source_dir"
+          git -C "$source_dir" remote add origin https://github.com/fcitx/fcitx5-qt.git
+          git -C "$source_dir" fetch --depth 1 origin "$FCITX5_QT_COMMIT"
+          git -C "$source_dir" checkout --detach FETCH_HEAD
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$FCITX5_QT_COMMIT"
+          grep -Fq "project(fcitx5-qt VERSION $FCITX5_QT_VERSION)" "$source_dir/CMakeLists.txt"
+          cmake -S "$source_dir" -B "$build_dir" -G Ninja \
+            -DBUILD_ONLY_PLUGIN=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$install_dir" \
+            -DCMAKE_INSTALL_QT6PLUGINDIR=lib/qt6/plugins \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DCMAKE_SKIP_RPATH=ON \
+            -DENABLE_QT4=OFF \
+            -DENABLE_QT5=OFF \
+            -DENABLE_QT6=ON \
+            -DENABLE_QT6_WAYLAND_WORKAROUND=ON \
+            -DENABLE_X11=OFF
+          cmake --build "$build_dir" --parallel 2
+          cmake --install "$build_dir"
+          plugin=$(find "$install_dir" -type f -name libfcitx5platforminputcontextplugin.so -print -quit)
+          test -n "$plugin"
+          mkdir -p "$install_dir/lib"
+          {
+            echo "FCITX5_PLUGIN=$plugin"
+            echo "FCITX5_LIBDIR=$install_dir/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Linux GUI package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(git describe --tags --always --dirty)
+          [[ $version != *-dirty ]]
+          make package-gui-linux \
+            VERSION="$version" \
+            QT_PREFIX="$QT_ROOT_DIR" \
+            QT_PKG_CONFIG_PATH="$QT_ROOT_DIR/lib/pkgconfig" \
+            FCITX5_PLUGIN="$FCITX5_PLUGIN" \
+            FCITX5_LIBDIR="$FCITX5_LIBDIR"
+          archive="$GITHUB_WORKSPACE/tmp/dist/ejquick-gui_${version}_linux_amd64.tar.zst"
+          test -f "$archive"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Linux GUI package
+        shell: bash
+        run: |
+          set -euo pipefail
+          make verify-gui-package \
+            VERSION="${{ steps.package.outputs.version }}" \
+            GUI_PACKAGE="${{ steps.package.outputs.archive }}"
+
+      - name: Record build metadata and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.package.outputs.archive }}"
+          archive_dir=$(dirname -- "$archive")
+          archive_name=$(basename -- "$archive")
+          (cd "$archive_dir" && sha256sum "$archive_name") > "$archive.sha256"
+          {
+            echo "version=${{ steps.package.outputs.version }}"
+            echo "commit=$GITHUB_SHA"
+            echo "build_image=$ROCKY_IMAGE"
+            echo "glibc=$(getconf GNU_LIBC_VERSION)"
+            echo "go=$(go env GOVERSION)"
+            echo "python=$(python --version | awk '{print $2}')"
+            echo "qt=$QT_VERSION"
+            echo "aqtinstall_commit=$AQT_COMMIT"
+            echo "miqt=$(go list -m -f '{{.Version}}' github.com/mappu/miqt)"
+            echo "fcitx5_qt=$FCITX5_QT_VERSION"
+            echo "fcitx5_qt_commit=$FCITX5_QT_COMMIT"
+            echo "compiler=$(gcc -dumpfullversion -dumpversion)"
+          } > "$archive.build-info.txt"
+
+      - name: Upload Linux GUI package
+        uses: actions/upload-artifact@v6
+        with:
+          name: ejquick-gui-linux-amd64-${{ steps.package.outputs.version }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.archive }}.sha256
+            ${{ steps.package.outputs.archive }}.build-info.txt
+          if-no-files-found: error
+          retention-days: 14

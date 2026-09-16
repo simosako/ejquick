@@ -120,6 +120,7 @@ if [[ -z $fcitx5_libdir ]]; then
 fi
 [[ -d $fcitx5_libdir ]] || fail "Fcitx5 library directory does not exist: $fcitx5_libdir"
 
+mkdir -p -- "$repository/tmp"
 work_dir=$(mktemp -d "$repository/tmp/package-gui-linux.XXXXXX")
 cleanup() {
 	rm -rf -- "$work_dir"

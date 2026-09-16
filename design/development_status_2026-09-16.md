@@ -332,10 +332,10 @@ D34〜D36を短い運用checklistへ落とし込む。この項目は本調査�
 
 ### 優先度2: GUI packageをCI / release成果物にする
 
-- 固定Qt / Fcitx5環境で`make package-gui-linux`
-- 作成した`tar.zst`を展開
+- 固定Qt / Fcitx5環境で`make package-gui-linux`（CI job実装済み、初回成功run待ち）
+- 作成した`tar.zst`を展開・静的検査（検査script実装済み、初回成功run待ち）
+- 通常CIでarchive、SHA-256、build metadataをartifactとして保持（実装済み）
 - 展開物に対するWayland smoke test
-- 通常CIではartifactとして保持
 - Tag release時だけGitHub Releasesへ追加
 - GUI packageをchecksum対象へ含める
 

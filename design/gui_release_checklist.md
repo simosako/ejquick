@@ -57,6 +57,12 @@ Fcitx5 Qt:
 
 6 GiBの開発VPSではQt / MIQTのfull build、`make test-gui`、`make package-gui-linux`をrelease確認として実行しない。
 
+自動化状況（2026-09-16）:
+
+- `.github/workflows/ci.yml`の`gui-package` jobにRocky Linux 9.6 imageをdigest固定したbuild環境を追加済み
+- Go 1.27.1、Python 3.12、Qt 6.11.2、MIQT v0.14.0、Fcitx5 Qt 5.1.15のcommitを検査・固定済み
+- 各checkboxは対象release候補の成功runを証跡として確認するまで未チェックのままとする
+
 ## 4. Sourceと既存frontendの品質確認
 
 - [ ] `go test ./...`が成功する
@@ -74,6 +80,12 @@ Fcitx5 Qt:
 原則として、上記は同じrelease tagから起動したGitHub Actionsの成功を証跡とする。
 
 ## 5. Package作成
+
+自動化状況（2026-09-16）:
+
+- `gui-package` jobが`make package-gui-linux`を実行し、archive、SHA-256、build metadataを14日間のCI artifactとして保存する
+- `packaging/linux/verify-gui-package.sh`がarchive名、単一root、必須file / plugin、version一致、relative RUNPATH、`qt.conf`、辞書artifact非混入を検査する
+- 完成archiveを使ったWayland E2E testと再現build比較は次の作業であり、この節のrelease候補checkboxはまだ未確認である
 
 - [ ] 固定release環境で`make package-gui-linux`が成功する
 - [ ] 出力名が`ejquick-gui_<version>_linux_amd64.tar.zst`である
