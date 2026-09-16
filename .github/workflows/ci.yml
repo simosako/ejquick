@@ -203,6 +203,7 @@ jobs:
           dnf install -y dnf-plugins-core
           dnf config-manager --set-enabled crb
           dnf install -y epel-release
+          dnf upgrade -y coreutils-single
           dnf swap -y coreutils-single coreutils
           dnf install -y \
             alsa-lib \
@@ -244,6 +245,7 @@ jobs:
             xcb-util-wm \
             zlib \
             zstd
+          command -v basename dirname sha256sum uname
 
       - uses: actions/checkout@v7
         with:
