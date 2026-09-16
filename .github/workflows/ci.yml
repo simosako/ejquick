@@ -207,6 +207,7 @@ jobs:
             alsa-lib \
             binutils \
             cmake \
+            coreutils \
             dbus-libs \
             extra-cmake-modules \
             findutils \
