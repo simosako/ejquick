@@ -20,7 +20,7 @@ fail() {
 [[ $expected_version != */* && $expected_version != *$'\n'* && $expected_version != *$'\r'* ]] || \
 	fail 'EXPECTED_VERSION contains an unsafe path character'
 
-for command in cmp find go grep readelf sed sort tar zstd; do
+for command in find go grep readelf sed sha256sum sort tar zstd; do
 	command -v "$command" >/dev/null 2>&1 || fail "required command is missing: $command"
 done
 
@@ -116,7 +116,8 @@ done < <(find "$package_root/bin" "$package_root/lib" "$package_root/plugins" -t
 
 generated_dependencies=$work_dir/DEPENDENCIES.tsv
 "$script_dir/generate-runtime-dependencies.sh" "$package_root" "$generated_dependencies"
-cmp -s "$package_root/DEPENDENCIES.tsv" "$generated_dependencies" || \
+[[ $(sha256sum "$package_root/DEPENDENCIES.tsv" | sed 's/ .*//') == \
+	$(sha256sum "$generated_dependencies" | sed 's/ .*//') ]] || \
 	fail 'DEPENDENCIES.tsv does not match the packaged ELF dependency graph'
 
 generated_go_dependencies=$work_dir/GO-DEPENDENCIES.tsv
@@ -126,7 +127,8 @@ generated_go_dependencies=$work_dir/GO-DEPENDENCIES.tsv
 		go version -m "$binary" | sed -n 's/^\tdep\t\([^\t]*\)\t\([^\t]*\).*/\1\t\2/p'
 	done
 } | sort -u >"$generated_go_dependencies"
-cmp -s "$package_root/GO-DEPENDENCIES.tsv" "$generated_go_dependencies" || \
+[[ $(sha256sum "$package_root/GO-DEPENDENCIES.tsv" | sed 's/ .*//') == \
+	$(sha256sum "$generated_go_dependencies" | sed 's/ .*//') ]] || \
 	fail 'GO-DEPENDENCIES.tsv does not match the packaged binaries'
 while IFS=$'\t' read -r module module_version; do
 	[[ -n $module && $module != \#* ]] || continue
