@@ -4,6 +4,7 @@ libFcitx5Qt*.so.*	bundle	Fcitx5 Qt runtime
 libicu*.so.*	bundle	ICU runtime supplied with Qt
 ld-linux-x86-64.so.2	host	glibc ELF loader
 libc.so.6	host	glibc
+libdl.so.2	host	glibc dynamic loader API
 libdbus-1.so.3	host	D-Bus
 libEGL.so.1	host	graphics driver interface
 libfontconfig.so.1	host	fontconfig
@@ -16,9 +17,12 @@ libgthread-2.0.so.0	host	GLib threading
 libICE.so.6	host	X11 ICE
 libm.so.6	host	glibc math
 libOpenGL.so.0	host	OpenGL dispatch
+libpthread.so.0	host	glibc threading
 libresolv.so.2	host	glibc resolver
+librt.so.1	host	glibc realtime API
 libSM.so.6	host	X11 session management
 libstdc++.so.6	host	GCC C++ runtime
+libutil.so.1	host	glibc utility API
 libwayland-client.so.0	host	Wayland client
 libwayland-cursor.so.0	host	Wayland cursor
 libX11.so.6	host	X11 client
