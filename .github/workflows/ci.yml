@@ -257,7 +257,7 @@ jobs:
           python-version: "3.12"
 
       - name: Verify fixed baseline
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           test "$(uname -m)" = x86_64
@@ -266,7 +266,7 @@ jobs:
           test "$(go list -m -f '{{.Version}}' github.com/mappu/miqt)" = "v0.14.0"
 
       - name: Install Qt 6.11.2
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           python -m pip install "git+https://github.com/miurahr/aqtinstall.git@${AQT_COMMIT}"
@@ -294,7 +294,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Verify Qt installation
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           test "$(pkg-config --modversion Qt6Core)" = "$QT_VERSION"
@@ -303,7 +303,7 @@ jobs:
           test "$("$QT_PATHS" -query QT_VERSION)" = "$QT_VERSION"
 
       - name: Build Fcitx5 Qt input context plugin
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           source_dir="$RUNNER_TEMP/fcitx5-qt"
@@ -339,7 +339,7 @@ jobs:
 
       - name: Build Linux GUI package
         id: package
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           version=$(git describe --tags --always --dirty)
@@ -356,7 +356,7 @@ jobs:
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Verify Linux GUI package
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           make verify-gui-package \
@@ -364,7 +364,7 @@ jobs:
             GUI_PACKAGE="${{ steps.package.outputs.archive }}"
 
       - name: Record build metadata and checksum
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
           archive="${{ steps.package.outputs.archive }}"
