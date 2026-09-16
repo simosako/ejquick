@@ -36,6 +36,8 @@
 
 詳細な調査時点の記録は[`development_status_2026-09-16.md`](development_status_2026-09-16.md)を参照する。この節は現在地の要約であり、D1〜D50は採用理由と不採用案を残すdecision logとして維持する。
 
+初期Linux GUI releaseの実施・判定には[`gui_release_checklist.md`](gui_release_checklist.md)を使用する。
+
 ---
 
 ## 1. この文書の位置付け
@@ -3372,7 +3374,7 @@ M1 / M2より前を前提にしたprototype作業へ戻る必要はない。検�
 
 優先順は次のとおりとする。
 
-1. D34〜D36のrelease完了条件を短い運用checklistへ整理する
+1. ~~D34〜D36のrelease完了条件を短い運用checklistへ整理する~~（[`gui_release_checklist.md`](gui_release_checklist.md)として完了）
 2. 固定したQt 6.11.2 / MIQT v0.14.0 / Go 1.27.1環境で`make package-gui-linux`をCI実行する
 3. 作成したarchiveを展開し、package内runtimeと同梱`ejquick-build`だけを使うWayland E2E testを行う
 4. glibc 2.34 baselineとdependency closureを検査し、dependency / license manifestを残す

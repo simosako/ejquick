@@ -315,7 +315,7 @@ Packageをnative Wayland専用へ縮小する場合は、XCBだけを削除す�
 
 ### 優先度1: GUI release完了条件のchecklist化
 
-D34〜D36を短い運用checklistへ落とし込む。
+D34〜D36を短い運用checklistへ落とし込む。この項目は本調査後、[`gui_release_checklist.md`](gui_release_checklist.md)の追加により完了した。
 
 最低限含める項目:
 
