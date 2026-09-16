@@ -15,7 +15,7 @@ M1とM2は完成している。実際には、その先のBuilder GUI統合とLi
 2. GitHub ReleasesへGUIパッケージを公開する
 3. 固定したglibc / Qt環境で互換性を確認する
 4. KWin / Fcitx5およびMutter / IBusの実環境確認を記録する
-5. 配布物の依存関係・ライセンス検査を完成させる
+5. 完成packageをclean environmentと実desktopで検証する
 
 現在地は、**機能実装はかなり完成しているが、正式配布物としての検証と公開が未完成**という段階である。
 
@@ -219,15 +219,17 @@ D36ではrelease前に少なくとも次の実環境smoke testを要求してい
 
 これらのrelease checklistや実施記録は、調査時点のrepositoryには存在しない。
 
-### 5.5 Package dependency / license検査が未完成
+### 5.5 Package dependency / license検査は完了
 
-`package-gui-linux.sh`にはruntime収集、RUNPATH、禁止辞書artifact、notice生成等の検査がある。ただしD29の完成条件に対しては次が不足している。
+CI run `35080642372`でdependency / license closureを完了した。
 
-- 全`DT_NEEDED` dependencyの分類manifest
-- 未分類SONAMEを失敗させる検査
-- RHEL 9系、Ubuntu 22.04 / 24.04、Debian 12でのclean test
-- Qt / Fcitx5 source versionとchecksumのrelease記録
-- 必須license / copyright文書が見つからない場合の明確なfailure条件
+- 全ELFの`DT_NEEDED`を`DEPENDENCIES.tsv`へ記録し、bundle 34件、host requirement 133件に分類した
+- 未分類SONAME、bundle対象の欠落、host対象の誤同梱をpackage作成失敗にした
+- Qt / Fcitx5 Qt / ICUのversion、固定source revision、取得URLを`SOURCE-COMPONENTS.txt`へ記録した
+- Qt / Fcitx5 Qt / ICUのlicense、copyright、Qt third-party attributionを同梱し、欠落時はpackage作成を失敗させる
+- Linked Go module一覧を`GO-DEPENDENCIES.tsv`へ記録し、`THIRD_PARTY_NOTICES`との一致を検査する
+
+RHEL 9系、Ubuntu 22.04 / 24.04、Debian 12でのclean testはdependency / license closureではなく、完成package E2Eと互換性検証の未完了項目として継続する。
 
 ### 5.6 GUI性能baselineの正式記録がない
 
@@ -355,9 +357,9 @@ D34〜D36を短い運用checklistへ落とし込む。この項目は本調査�
 ### 優先度4: 正式build baselineと配布検査
 
 - glibc 2.34相当環境でのbuild
-- `DT_NEEDED` manifest作成
-- 未分類dependencyの検出
-- 必須license fileの検査
+- ~~`DT_NEEDED` manifest作成~~（CI run `35080642372`で完了）
+- ~~未分類dependencyの検出~~（CI run `35080642372`で完了）
+- ~~必須license fileの検査~~（CI run `35080642372`で完了）
 - 対象clean environmentでの起動確認
 
 ### 優先度5: 実環境testと性能記録
@@ -372,6 +374,6 @@ D34〜D36を短い運用checklistへ落とし込む。この項目は本調査�
 
 現時点の状況は次のように表現するのが正確である。
 
-> コア、TUI、CLI、Builderは完成し、複数platform向けにrelease済み。Linux GUIは検索画面、Builder UI、desktop統合、package作成機能まで実装済み。現在は初回GUI配布に向けたpackage CI、互換性、実環境、dependency / license検証の段階にある。
+> コア、TUI、CLI、Builderは完成し、複数platform向けにrelease済み。Linux GUIは検索画面、Builder UI、desktop統合、package作成、dependency / license closureまで完了した。現在は初回GUI配布に向けた完成package E2E、互換性、実環境検証の段階にある。
 
 次に新しいGUI機能を追加するのではなく、既存GUIを正式な配布物として完成させることを優先する。

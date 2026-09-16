@@ -33,17 +33,20 @@
 証跡:
 
 ```text
-Version / tag: v0.3.1-15-g470c0eb (CI validation candidate; not a published release)
-Commit: 470c0eb2fdeb0b472456907bce96e3088601bbfb
-CI run: https://github.com/simosako/ejquick/actions/runs/35065872913
-Artifact: ejquick-gui-linux-amd64-v0.3.1-15-g470c0eb (GitHub Actions artifact ID 10435065314)
-SHA-256: af22cccbad4a1a1a415507ece03c9f52db9da63319e929761247e9c734775718
+Version / tag: v0.3.1-23-g30da547 (CI validation candidate; not a published release)
+Commit: 30da54727366fd80cc404fc04d67eec91c8119d4
+CI run: https://github.com/simosako/ejquick/actions/runs/35080642372
+Artifact: ejquick-gui-linux-amd64-v0.3.1-23-g30da547 (GitHub Actions artifact ID 10440572209)
+SHA-256: 103afdc06964af9ba09fc346d274670fe35ea3fcce535d37a4be710521045b23
 Build image / digest: rockylinux/rockylinux@sha256:91bbb8eb52ca462611c1f9ce5c4cede4172a31bfe64f336e82f29648694a3cfe
 Qt: 6.11.2
 MIQT: v0.14.0
 Go: 1.27.1
 C/C++ compiler: GCC 11.5.0
 Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
+Qt Base source: ef55f427f2c8b410d34f8a7681020a3000cf6866
+Qt Wayland source: fd0456558bc1766da85aee42f6a87f79092cbb13
+ICU: 73.2 (680f521746a3bd6a86f25f25ee50a62d88b489cf)
 ```
 
 ## 3. Build環境
@@ -64,6 +67,7 @@ Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 - `.github/workflows/ci.yml`の`gui-package` jobにRocky Linux 9.6 imageをdigest固定したbuild環境を追加済み
 - Go 1.27.1、Python 3.12、Qt 6.11.2、MIQT v0.14.0、Fcitx5 Qt 5.1.15のcommitを検査・固定済み
 - 初回成功run `35065872913`で固定baseline、Qt導入、Fcitx5 Qt build、package buildを確認済み
+- Dependency / license closureを含むrun `35080642372`で同じ固定baselineからの最終package作成を確認済み
 
 ## 4. Sourceと既存frontendの品質確認
 
@@ -86,7 +90,7 @@ Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 自動化状況（2026-09-16）:
 
 - `gui-package` jobが`make package-gui-linux`を実行し、archive、SHA-256、build metadataを14日間のCI artifactとして保存する
-- `packaging/linux/verify-gui-package.sh`がarchive名、単一root、必須file / plugin、version一致、relative RUNPATH、`qt.conf`、辞書artifact非混入を検査する
+- `packaging/linux/verify-gui-package.sh`がarchive名、単一root、必須file / plugin / license、version一致、dependency manifest、relative RUNPATH、`qt.conf`、辞書artifact非混入を検査する
 - 初回成功run `35065872913`のartifactを再downloadし、保存されたSHA-256との一致を確認済み
 - 完成archiveを使ったWayland E2E testと再現build比較は次の作業である
 
@@ -114,7 +118,7 @@ Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 - [x] `README.md`
 - [x] `LICENSE`
 - [x] `THIRD_PARTY_NOTICES`
-- [ ] Qt / Fcitx5を含むGUI runtime noticeと必要なlicense文書
+- [x] Qt / Fcitx5 / ICUを含むGUI runtime noticeと必要なlicense文書
 
 ### 含めてはいけないもの
 
@@ -129,11 +133,11 @@ Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 
 - [x] `ejquick-gui --version`と同梱`ejquick-build --version`がrelease versionと一致する
 - [ ] `ejquick-gui --help` / `--version`がconfig、DB、Qt platform初期化なしで成功する
-- [ ] Executableと同梱library / pluginの`DT_NEEDED` closureを記録している
-- [ ] 全dependencyを「bundle」または「host requirement」に分類している
-- [ ] 未分類SONAMEがない
+- [x] Executableと同梱library / pluginの`DT_NEEDED` closureを記録している
+- [x] 全dependencyを「bundle」または「host requirement」に分類している
+- [x] 未分類SONAMEがない
 - [x] Qt / Fcitx5 Qt dependencyがpackage内で解決される
-- [ ] glibc、ELF loader、Wayland / X11、DBus、XKB、font、OpenGL / EGL等の除外対象を誤ってbundleしていない
+- [x] glibc、ELF loader、Wayland / X11、DBus、XKB、font、OpenGL / EGL等の除外対象を誤ってbundleしていない
 - [x] Executableと必要なplugin / libraryのrelative RUNPATHが正しい
 - [x] Build hostのQt pathやabsolute RPATHが残っていない
 - [x] `qt.conf`がpackage内`plugins/`だけを標準探索先にしている
@@ -142,8 +146,14 @@ Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 Dependency manifest:
 
 ```text
-Path / URL:
-Checksum:
+Artifact path: DEPENDENCIES.tsv
+Entries: 167 (bundle 34 / host requirement 133)
+SHA-256: 3bb39eb8ff5cc5db42786adf7680142304afc3880190ef5365fcbe100924319f
+Go module manifest: GO-DEPENDENCIES.tsv
+Go module manifest SHA-256: eeaf3b23533dc4461bc2555d87a092f18da43c0aee2df8cf5c7caafdfc9f976c
+Source manifest: SOURCE-COMPONENTS.txt
+Source manifest SHA-256: 5cc359beca4ea43c25db40cc8371db89cb37b437d429b25d863d411226fff2ff
+Evidence: https://github.com/simosako/ejquick/actions/runs/35080642372
 ```
 
 ## 7. 完成packageの自動E2E test
@@ -208,13 +218,22 @@ Checksum:
 
 ## 9. License / privacy / security
 
-- [ ] Bundled Qt moduleが採用license条件で再配布可能である
-- [ ] Dynamic linkとlibrary差し替え要件を満たす
-- [ ] Qt copyright / license / third-party attributionを同梱する
-- [ ] Fcitx5 Qt plugin / addonのcopyright / licenseを同梱する
-- [ ] 対応するQt / Fcitx5 source入手方法を記載する
-- [ ] `THIRD_PARTY_NOTICES`が固定済みGo dependency graphと一致する
-- [ ] Package作成時に必須noticeが見つからなければ失敗する
+- [x] Bundled Qt moduleが採用license条件で再配布可能である
+- [x] Dynamic linkとlibrary差し替え要件を満たす
+- [x] Qt copyright / license / third-party attributionを同梱する
+- [x] Fcitx5 Qt plugin / addonのcopyright / licenseを同梱する
+- [x] 対応するQt / Fcitx5 / ICU source入手方法を記載する
+- [x] `THIRD_PARTY_NOTICES`が固定済みGo dependency graphと一致する
+- [x] Package作成時に必須noticeが見つからなければ失敗する
+
+License closure evidence（run `35080642372`）:
+
+- Qt 6.11.2はLGPL-3.0のdynamic-link配布として扱い、Qt Base / Qt Waylandのlicense集合と、87 component分のcopyright・license本文を含む`licenses/Qt/THIRD-PARTY-NOTICES.txt`を同梱した
+- Fcitx5 Qt 5.1.15はLGPL-2.1-or-later本文、BSD-3-Clause本文、sourceのSPDX copyright一覧を同梱した
+- ICU 73.2のlicense本文を同梱した
+- `SOURCE-COMPONENTS.txt`に全同梱runtimeの固定source revisionと取得URLを記録した
+- `go version -m`から生成した`GO-DEPENDENCIES.tsv`と`THIRD_PARTY_NOTICES`の一致をpackage作成時と検証時の両方で確認した
+- Qt third-party notice SHA-256: `ff68f57d28101fb207d8a937c165197da1235f9e33c1c0427c82662ee46cf2e9`
 - [ ] Applicationは起動・検索・buildにnetwork accessを必要としない
 - [ ] Telemetry、remote asset、automatic update checkがない
 - [ ] 通常error logにquery、headword、entry本文、source TXT内容を記録しない
