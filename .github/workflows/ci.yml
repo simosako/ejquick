@@ -253,8 +253,10 @@ jobs:
           cache: true
 
       - uses: actions/setup-python@v6
+        id: python
         with:
           python-version: "3.12"
+          update-environment: false
 
       - name: Verify fixed baseline
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
@@ -263,15 +265,17 @@ jobs:
           test "$(uname -m)" = x86_64
           test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.34"
           test "$(go env GOVERSION)" = "go1.27.1"
+          [[ $("${{ steps.python.outputs.python-path }}" --version) == Python\ 3.12.* ]]
           test "$(go list -m -f '{{.Version}}' github.com/mappu/miqt)" = "v0.14.0"
 
       - name: Install Qt 6.11.2
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           set -euo pipefail
-          python -m pip install "git+https://github.com/miurahr/aqtinstall.git@${AQT_COMMIT}"
+          python_bin="${{ steps.python.outputs.python-path }}"
+          "$python_bin" -m pip install "git+https://github.com/miurahr/aqtinstall.git@${AQT_COMMIT}"
           cd "$RUNNER_TEMP"
-          aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 \
+          "$python_bin" -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
             --modules qtwaylandcompositor
           qt_root="$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64"
@@ -377,7 +381,7 @@ jobs:
             echo "build_image=$ROCKY_IMAGE"
             echo "glibc=$(getconf GNU_LIBC_VERSION)"
             echo "go=$(go env GOVERSION)"
-            echo "python=$(python --version | awk '{print $2}')"
+            echo "python=$("${{ steps.python.outputs.python-path }}" --version | awk '{print $2}')"
             echo "qt=$QT_VERSION"
             echo "aqtinstall_commit=$AQT_COMMIT"
             echo "miqt=$(go list -m -f '{{.Version}}' github.com/mappu/miqt)"
