@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -66,6 +67,12 @@ func runWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ejquick-build: %v\n", err)
 		return 2
 	}
+	output, err := filepath.Abs(opts.Output)
+	if err != nil {
+		fmt.Fprintf(stderr, "ejquick-build: resolve output path: %v\n", err)
+		return 2
+	}
+	fmt.Fprintf(stderr, "Output: %s\n", output)
 	return 0
 }
 

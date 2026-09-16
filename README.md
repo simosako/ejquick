@@ -45,10 +45,10 @@ ejquick-build --type waei WAEIJI-144-10.TXT
 By default, databases are written as `eiwa.sqlite3` or `waei.sqlite3` in
 the platform data directory under `ejquick/`; missing directories are
 created automatically. Use `--output <path>` to choose another location.
-Progress goes to stderr; the database is built in a temporary file,
-validated read-only, and only then published atomically. `--force`
-replaces an existing database; `--compact` additionally runs `VACUUM` for
-a smaller file.
+Progress and the successful output path go to stderr; the database is built
+in a temporary file, validated read-only, and only then published atomically.
+`--force` replaces an existing database; `--compact` additionally runs
+`VACUUM` for a smaller file.
 
 2. Search:
 

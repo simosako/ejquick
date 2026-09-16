@@ -181,6 +181,9 @@ func TestRunBuildWritesProgressOnlyToStderr(t *testing.T) {
 			t.Errorf("stderr does not contain %q: %q", line, stderr.String())
 		}
 	}
+	if !strings.Contains(stderr.String(), "Output: "+output) {
+		t.Errorf("stderr does not contain output path: %q", stderr.String())
+	}
 	if _, err := os.Stat(output); err != nil {
 		t.Errorf("stat output: %v", err)
 	}
