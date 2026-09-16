@@ -367,30 +367,22 @@ jobs:
           git -C "$license_root/icu-source" sparse-checkout set --no-cone icu4c/LICENSE
           cp -a "$license_root/qtbase-source/LICENSES" "$license_root/Qt/qtbase"
           cp -a "$license_root/qtwayland-source/LICENSES" "$license_root/Qt/qtwayland"
-          collect_qt_attributions() {
-            local repository=$1
-            local component=$2
-            local path destination
-            while IFS= read -r path; do
-              destination="$license_root/Qt-attributions/$component/$path"
-              mkdir -p "$(dirname -- "$destination")"
-              git -C "$repository" show "HEAD:$path" > "$destination"
-            done < <(git -C "$repository" ls-tree -r --name-only HEAD | grep '/qt_attribution.json$')
-          }
-          collect_qt_attributions "$license_root/qtbase-source" qtbase
-          collect_qt_attributions "$license_root/qtwayland-source" qtwayland
+          packaging/linux/collect-qt-attributions.py \
+            "$license_root/Qt-THIRD-PARTY-NOTICES.txt" \
+            "qtbase=$license_root/qtbase-source" \
+            "qtwayland=$license_root/qtwayland-source"
           git -C "$RUNNER_TEMP/fcitx5-qt" grep -h 'SPDX-FileCopyrightText:' HEAD -- common qt6 \
             | sed 's/.*SPDX-FileCopyrightText:[[:space:]]*//' \
             | sort -u > "$license_root/Fcitx5-Qt-COPYRIGHTS.txt"
           test -f "$license_root/Qt/qtbase/LGPL-3.0-only.txt"
           test -f "$license_root/Qt/qtbase/GPL-3.0-only.txt"
-          test -n "$(find "$license_root/Qt-attributions" -type f -name qt_attribution.json -print -quit)"
+          test -s "$license_root/Qt-THIRD-PARTY-NOTICES.txt"
           test -f "$FCITX5_LICENSES_DIR/LGPL-2.1-or-later.txt"
           test -s "$license_root/Fcitx5-Qt-COPYRIGHTS.txt"
           test -s "$license_root/icu-source/icu4c/LICENSE"
           {
             echo "QT_LICENSES_DIR=$license_root/Qt"
-            echo "QT_ATTRIBUTIONS_DIR=$license_root/Qt-attributions"
+            echo "QT_ATTRIBUTIONS_FILE=$license_root/Qt-THIRD-PARTY-NOTICES.txt"
             echo "FCITX5_COPYRIGHT_FILE=$license_root/Fcitx5-Qt-COPYRIGHTS.txt"
             echo "ICU_LICENSE_FILE=$license_root/icu-source/icu4c/LICENSE"
             echo "QTBASE_SOURCE_REV=$(git -C "$license_root/qtbase-source" rev-parse HEAD)"
@@ -414,7 +406,7 @@ jobs:
             FCITX5_PLUGIN="$FCITX5_PLUGIN" \
             FCITX5_LIBDIR="$FCITX5_LIBDIR" \
             QT_LICENSES_DIR="$QT_LICENSES_DIR" \
-            QT_ATTRIBUTIONS_DIR="$QT_ATTRIBUTIONS_DIR" \
+            QT_ATTRIBUTIONS_FILE="$QT_ATTRIBUTIONS_FILE" \
             FCITX5_LICENSES_DIR="$FCITX5_LICENSES_DIR" \
             FCITX5_COPYRIGHT_FILE="$FCITX5_COPYRIGHT_FILE" \
             ICU_LICENSE_FILE="$ICU_LICENSE_FILE" \

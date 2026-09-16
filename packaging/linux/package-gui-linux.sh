@@ -13,7 +13,7 @@ output_dir=${PACKAGE_OUTPUT_DIR:-$repository/tmp/dist}
 fcitx5_plugin=${FCITX5_PLUGIN:-}
 fcitx5_libdir=${FCITX5_LIBDIR:-}
 qt_licenses_dir=${QT_LICENSES_DIR:-}
-qt_attributions_dir=${QT_ATTRIBUTIONS_DIR:-}
+qt_attributions_file=${QT_ATTRIBUTIONS_FILE:-}
 fcitx5_licenses_dir=${FCITX5_LICENSES_DIR:-}
 fcitx5_copyright_file=${FCITX5_COPYRIGHT_FILE:-}
 icu_license_file=${ICU_LICENSE_FILE:-}
@@ -39,7 +39,7 @@ require_command zstd
 [[ $version != */* && $version != *$'\n'* && $version != *$'\r'* ]] || fail 'VERSION contains an unsafe path character'
 [[ -d $qt_prefix ]] || fail "Qt prefix does not exist: $qt_prefix"
 [[ -n $qt_licenses_dir && -d $qt_licenses_dir ]] || fail 'QT_LICENSES_DIR must identify the reviewed Qt license directory'
-[[ -n $qt_attributions_dir && -d $qt_attributions_dir ]] || fail 'QT_ATTRIBUTIONS_DIR must identify the Qt attribution directory'
+[[ -n $qt_attributions_file && -s $qt_attributions_file ]] || fail 'QT_ATTRIBUTIONS_FILE must identify the Qt attribution notice'
 [[ -n $fcitx5_licenses_dir && -d $fcitx5_licenses_dir ]] || fail 'FCITX5_LICENSES_DIR must identify the Fcitx5 Qt license directory'
 [[ -n $fcitx5_copyright_file && -s $fcitx5_copyright_file ]] || fail 'FCITX5_COPYRIGHT_FILE must identify the Fcitx5 Qt copyright list'
 [[ -n $icu_license_file && -f $icu_license_file ]] || fail 'ICU_LICENSE_FILE must identify the ICU license file'
@@ -245,15 +245,14 @@ done
 
 mkdir -p -- "$package_root/licenses/Qt" "$package_root/licenses/Fcitx5-Qt" "$package_root/licenses/ICU"
 cp -a -- "$qt_licenses_dir/." "$package_root/licenses/Qt/"
-cp -a -- "$qt_attributions_dir" "$package_root/licenses/Qt/attributions"
+cp -- "$qt_attributions_file" "$package_root/licenses/Qt/THIRD-PARTY-NOTICES.txt"
 cp -a -- "$fcitx5_licenses_dir/." "$package_root/licenses/Fcitx5-Qt/"
 cp -- "$fcitx5_copyright_file" "$package_root/licenses/Fcitx5-Qt/COPYRIGHTS.txt"
 cp -- "$icu_license_file" "$package_root/licenses/ICU/LICENSE"
 [[ -f $package_root/licenses/Qt/qtbase/LGPL-3.0-only.txt ]] || fail 'Qt LGPL-3.0 license text is missing'
 [[ -f $package_root/licenses/Qt/qtbase/GPL-3.0-only.txt ]] || fail 'Qt GPL-3.0 license text is missing'
 [[ -f $package_root/licenses/Fcitx5-Qt/LGPL-2.1-or-later.txt ]] || fail 'Fcitx5 Qt LGPL-2.1 license text is missing'
-find "$package_root/licenses/Qt/attributions" -type f -name qt_attribution.json -print -quit | grep -q . || \
-	fail 'Qt third-party attribution metadata is missing'
+[[ -s $package_root/licenses/Qt/THIRD-PARTY-NOTICES.txt ]] || fail 'Qt third-party attribution notice is empty'
 [[ -s $package_root/licenses/Fcitx5-Qt/COPYRIGHTS.txt ]] || fail 'Fcitx5 Qt copyright list is empty'
 [[ -s $package_root/licenses/ICU/LICENSE ]] || fail 'ICU license text is empty'
 

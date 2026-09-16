@@ -73,6 +73,7 @@ required_files=(
 	licenses/GUI-RUNTIME-NOTICES.txt
 	licenses/Qt/qtbase/LGPL-3.0-only.txt
 	licenses/Qt/qtbase/GPL-3.0-only.txt
+	licenses/Qt/THIRD-PARTY-NOTICES.txt
 	licenses/Fcitx5-Qt/LGPL-2.1-or-later.txt
 	licenses/Fcitx5-Qt/COPYRIGHTS.txt
 	licenses/ICU/LICENSE
@@ -80,8 +81,6 @@ required_files=(
 for path in "${required_files[@]}"; do
 	[[ -f $package_root/$path ]] || fail "required package file is missing: $path"
 done
-find "$package_root/licenses/Qt/attributions" -type f -name qt_attribution.json -print -quit | grep -q . || \
-	fail 'Qt third-party attribution metadata is missing'
 
 shopt -s nullglob
 wayland_plugins=("$package_root/plugins/platforms"/libqwayland*.so)
