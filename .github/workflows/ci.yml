@@ -337,7 +337,7 @@ jobs:
             -DENABLE_QT6_WAYLAND_WORKAROUND=ON \
             -DENABLE_X11=OFF
           cmake --build "$build_dir" --parallel 2
-          cmake --install "$build_dir"
+          cmake --install "$build_dir" --prefix "$install_dir"
           plugin=$(find "$install_dir" -type f -name libfcitx5platforminputcontextplugin.so -print -quit)
           test -n "$plugin"
           mkdir -p "$install_dir/lib"
