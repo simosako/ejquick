@@ -224,6 +224,7 @@ jobs:
             libX11-xcb \
             libXext \
             libXrender \
+            libglvnd-devel \
             libglvnd-egl \
             libglvnd-glx \
             libxcb \
