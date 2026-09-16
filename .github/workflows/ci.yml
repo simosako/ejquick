@@ -364,7 +364,7 @@ jobs:
           git -C "$license_root/qtwayland-source" sparse-checkout set LICENSES
           git clone --depth 1 --branch release-73-2 --filter=blob:none --sparse \
             https://github.com/unicode-org/icu.git "$license_root/icu-source"
-          git -C "$license_root/icu-source" sparse-checkout set icu4c/LICENSE
+          git -C "$license_root/icu-source" sparse-checkout set --no-cone icu4c/LICENSE
           cp -a "$license_root/qtbase-source/LICENSES" "$license_root/Qt/qtbase"
           cp -a "$license_root/qtwayland-source/LICENSES" "$license_root/Qt/qtwayland"
           test -f "$license_root/Qt/qtbase/LGPL-3.0-only.txt"
