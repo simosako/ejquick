@@ -3364,8 +3364,8 @@ D26の環境自動選択方針とD16のlogical pixel基準に一致し、利用�
 | Builder protocol | 完了 | Version handshake、progress、cancel、hard kill、temporary cleanup、output lock |
 | Builder dialog | 完了 | Setup、progress、failure recovery、build後のDB再open |
 | Linux desktop integration | 完了 | Desktop entry、登録 / 解除script |
-| Package staging | Script実装済み | Self-contained `tar.zst`作成、Qt / Fcitx5 runtime staging |
-| Packaged release verification | 未完了 | 完成package CI、clean environment、glibc baseline、実desktop / IME、license検査 |
+| Package staging | CI検証済み | Self-contained `tar.zst`作成、Qt / Fcitx5 runtime staging、SHA-256 / build metadata保存 |
+| Packaged release verification | 進行中 | 固定Rocky 9 / glibc 2.34での作成・静的検査は成功。clean environment、実desktop / IME、dependency / license closureは未完了 |
 | GitHub ReleasesへのGUI公開 | 未完了 | GUI artifact、checksum、tag release連携 |
 
 M1 / M2より前を前提にしたprototype作業へ戻る必要はない。検索GUIやBuilderへ新機能を追加する前に、現在の実装を完成packageとして検証・公開する。
@@ -3375,7 +3375,7 @@ M1 / M2より前を前提にしたprototype作業へ戻る必要はない。検�
 優先順は次のとおりとする。
 
 1. ~~D34〜D36のrelease完了条件を短い運用checklistへ整理する~~（[`gui_release_checklist.md`](gui_release_checklist.md)として完了）
-2. 固定したQt 6.11.2 / MIQT v0.14.0 / Go 1.27.1環境で`make package-gui-linux`をCI実行する（Rocky Linux 9.6 job実装済み、初回成功run待ち）
+2. ~~固定したQt 6.11.2 / MIQT v0.14.0 / Go 1.27.1環境で`make package-gui-linux`をCI実行する~~（Rocky Linux 9.6のCI run `35065872913`で初回成功）
 3. 作成したarchiveを展開し、package内runtimeと同梱`ejquick-build`だけを使うWayland E2E testを行う
 4. glibc 2.34 baselineとdependency closureを検査し、dependency / license manifestを残す
 5. KWin + Fcitx5、Mutter + IBusの実desktop checklistを実施・記録する

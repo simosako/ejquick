@@ -26,34 +26,36 @@
 
 - [ ] Release tagまたはrelease候補versionが決まっている
 - [ ] 対象commitがreview済みで、working treeがcleanである
-- [ ] `ejquick-gui`と同梱`ejquick-build`へ同じproduct versionが埋め込まれている
-- [ ] Qt、MIQT、Go、C/C++ compiler、Fcitx5 Qt pluginのversion / commitが記録されている
-- [ ] Build imageの名称と不変な識別子（digest等）が記録されている
+- [x] `ejquick-gui`と同梱`ejquick-build`へ同じproduct versionが埋め込まれている
+- [x] Qt、MIQT、Go、C/C++ compiler、Fcitx5 Qt pluginのversion / commitが記録されている
+- [x] Build imageの名称と不変な識別子（digest等）が記録されている
 
 証跡:
 
 ```text
-Version / tag:
-Commit:
-CI run:
-Build image / digest:
-Qt:
-MIQT:
-Go:
-C/C++ compiler:
-Fcitx5 Qt:
+Version / tag: v0.3.1-15-g470c0eb (CI validation candidate; not a published release)
+Commit: 470c0eb2fdeb0b472456907bce96e3088601bbfb
+CI run: https://github.com/simosako/ejquick/actions/runs/35065872913
+Artifact: ejquick-gui-linux-amd64-v0.3.1-15-g470c0eb (GitHub Actions artifact ID 10435065314)
+SHA-256: af22cccbad4a1a1a415507ece03c9f52db9da63319e929761247e9c734775718
+Build image / digest: rockylinux/rockylinux@sha256:91bbb8eb52ca462611c1f9ce5c4cede4172a31bfe64f336e82f29648694a3cfe
+Qt: 6.11.2
+MIQT: v0.14.0
+Go: 1.27.1
+C/C++ compiler: GCC 11.5.0
+Fcitx5 Qt: 5.1.15 (272b6b9eba97f0ed97e8a5caaf0bb22c6123f462)
 ```
 
 ## 3. Build環境
 
-- [ ] Release buildがLinux `x86_64`で実行されている
-- [ ] glibc 2.34相当の固定環境（RHEL 9系相当）でbuildされている
-- [ ] Qt 6.11.2を固定している
-- [ ] MIQT v0.14.0を`go.mod` / `go.sum`で固定している
-- [ ] Go 1.27.1を固定している
-- [ ] Fcitx5 input context pluginが同じQt 6.11.2向けにbuildされている
-- [ ] Qt / MIQT / compiler cacheが別Qt installationを参照していない
-- [ ] BuildがGitHub Actionsまたは十分なmemoryを持つ専用環境で実行されている
+- [x] Release buildがLinux `x86_64`で実行されている
+- [x] glibc 2.34相当の固定環境（RHEL 9系相当）でbuildされている
+- [x] Qt 6.11.2を固定している
+- [x] MIQT v0.14.0を`go.mod` / `go.sum`で固定している
+- [x] Go 1.27.1を固定している
+- [x] Fcitx5 input context pluginが同じQt 6.11.2向けにbuildされている
+- [x] Qt / MIQT / compiler cacheが別Qt installationを参照していない
+- [x] BuildがGitHub Actionsまたは十分なmemoryを持つ専用環境で実行されている
 
 6 GiBの開発VPSではQt / MIQTのfull build、`make test-gui`、`make package-gui-linux`をrelease確認として実行しない。
 
@@ -61,19 +63,19 @@ Fcitx5 Qt:
 
 - `.github/workflows/ci.yml`の`gui-package` jobにRocky Linux 9.6 imageをdigest固定したbuild環境を追加済み
 - Go 1.27.1、Python 3.12、Qt 6.11.2、MIQT v0.14.0、Fcitx5 Qt 5.1.15のcommitを検査・固定済み
-- 各checkboxは対象release候補の成功runを証跡として確認するまで未チェックのままとする
+- 初回成功run `35065872913`で固定baseline、Qt導入、Fcitx5 Qt build、package buildを確認済み
 
 ## 4. Sourceと既存frontendの品質確認
 
-- [ ] `go test ./...`が成功する
-- [ ] `go test -race ./...`が成功する
-- [ ] `go vet ./...`が成功する
-- [ ] `make fmt-check`が成功する
-- [ ] `make tidy-check`が成功する
-- [ ] `make bench-smoke`が成功する
-- [ ] Linux / Windows / macOSのamd64 / arm64 Pure Go cross-buildが成功する
-- [ ] Qt 6.11.2環境で`make test-gui`が成功する
-- [ ] Qt 6.11.2環境で`make vet-gui`が成功する
+- [x] `go test ./...`が成功する
+- [x] `go test -race ./...`が成功する
+- [x] `go vet ./...`が成功する
+- [x] `make fmt-check`が成功する
+- [x] `make tidy-check`が成功する
+- [x] `make bench-smoke`が成功する
+- [x] Linux / Windows / macOSのamd64 / arm64 Pure Go cross-buildが成功する
+- [x] Qt 6.11.2環境で`make test-gui`が成功する
+- [x] Qt 6.11.2環境で`make vet-gui`が成功する
 - [ ] `make test-desktop`が成功する
 - [ ] 既存のTUI / CLI / Builder release成果物とCLI contractを維持している
 
@@ -85,56 +87,57 @@ Fcitx5 Qt:
 
 - `gui-package` jobが`make package-gui-linux`を実行し、archive、SHA-256、build metadataを14日間のCI artifactとして保存する
 - `packaging/linux/verify-gui-package.sh`がarchive名、単一root、必須file / plugin、version一致、relative RUNPATH、`qt.conf`、辞書artifact非混入を検査する
-- 完成archiveを使ったWayland E2E testと再現build比較は次の作業であり、この節のrelease候補checkboxはまだ未確認である
+- 初回成功run `35065872913`のartifactを再downloadし、保存されたSHA-256との一致を確認済み
+- 完成archiveを使ったWayland E2E testと再現build比較は次の作業である
 
-- [ ] 固定release環境で`make package-gui-linux`が成功する
-- [ ] 出力名が`ejquick-gui_<version>_linux_amd64.tar.zst`である
-- [ ] Archiveを展開・一覧検査できる
-- [ ] Archive rootがversion付きの単一directoryである
+- [x] 固定release環境で`make package-gui-linux`が成功する
+- [x] 出力名が`ejquick-gui_<version>_linux_amd64.tar.zst`である
+- [x] Archiveを展開・一覧検査できる
+- [x] Archive rootがversion付きの単一directoryである
 - [ ] 同じsource / versionから再作成したarchiveの内容が再現可能である
 - [ ] Package作成時の一時fileがrelease artifactへ混入していない
 
 ### 必須内容
 
-- [ ] `bin/ejquick-gui`
-- [ ] `bin/ejquick-build`
-- [ ] `bin/qt.conf`
-- [ ] 必要なQt shared libraries
-- [ ] Wayland QPA plugin
-- [ ] XCB QPA plugin（fallback / best effort）
-- [ ] Compose input context plugin
-- [ ] IBus input context plugin
-- [ ] Fcitx5 input context pluginと必要なFcitx5 Qt addon
-- [ ] Desktop entry template
-- [ ] `install-desktop.sh`
-- [ ] `uninstall-desktop.sh`
-- [ ] `README.md`
-- [ ] `LICENSE`
-- [ ] `THIRD_PARTY_NOTICES`
+- [x] `bin/ejquick-gui`
+- [x] `bin/ejquick-build`
+- [x] `bin/qt.conf`
+- [x] 必要なQt shared libraries
+- [x] Wayland QPA plugin
+- [x] XCB QPA plugin（fallback / best effort）
+- [x] Compose input context plugin
+- [x] IBus input context plugin
+- [x] Fcitx5 input context pluginと必要なFcitx5 Qt addon
+- [x] Desktop entry template
+- [x] `install-desktop.sh`
+- [x] `uninstall-desktop.sh`
+- [x] `README.md`
+- [x] `LICENSE`
+- [x] `THIRD_PARTY_NOTICES`
 - [ ] Qt / Fcitx5を含むGUI runtime noticeと必要なlicense文書
 
 ### 含めてはいけないもの
 
-- [ ] 英辞郎・和英辞郎のTXT / ZIPが含まれていない
-- [ ] 生成済み辞書DBやSQLite sidecarが含まれていない
+- [x] 英辞郎・和英辞郎のTXT / ZIPが含まれていない
+- [x] 生成済み辞書DBやSQLite sidecarが含まれていない
 - [ ] 実辞書由来のfixture、検索語、entry本文が含まれていない
 - [ ] Build host固有のabsolute path、cache、debug artifactが含まれていない
-- [ ] 不要なQPA plugin（offscreen、minimal、eglfs、linuxfb等）が含まれていない
-- [ ] Font、input method daemon、graphics driver、glibc等のhost componentが含まれていない
+- [x] 不要なQPA plugin（offscreen、minimal、eglfs、linuxfb等）が含まれていない
+- [x] Font、input method daemon、graphics driver、glibc等のhost componentが含まれていない
 
 ## 6. Binary / runtime dependency検査
 
-- [ ] `ejquick-gui --version`と同梱`ejquick-build --version`がrelease versionと一致する
+- [x] `ejquick-gui --version`と同梱`ejquick-build --version`がrelease versionと一致する
 - [ ] `ejquick-gui --help` / `--version`がconfig、DB、Qt platform初期化なしで成功する
 - [ ] Executableと同梱library / pluginの`DT_NEEDED` closureを記録している
 - [ ] 全dependencyを「bundle」または「host requirement」に分類している
 - [ ] 未分類SONAMEがない
-- [ ] Qt / Fcitx5 Qt dependencyがpackage内で解決される
+- [x] Qt / Fcitx5 Qt dependencyがpackage内で解決される
 - [ ] glibc、ELF loader、Wayland / X11、DBus、XKB、font、OpenGL / EGL等の除外対象を誤ってbundleしていない
-- [ ] Executableと必要なplugin / libraryのrelative RUNPATHが正しい
-- [ ] Build hostのQt pathやabsolute RPATHが残っていない
-- [ ] `qt.conf`がpackage内`plugins/`だけを標準探索先にしている
-- [ ] System Qt pluginとのversion混在がない
+- [x] Executableと必要なplugin / libraryのrelative RUNPATHが正しい
+- [x] Build hostのQt pathやabsolute RPATHが残っていない
+- [x] `qt.conf`がpackage内`plugins/`だけを標準探索先にしている
+- [x] System Qt pluginとのversion混在がない
 
 Dependency manifest:
 
