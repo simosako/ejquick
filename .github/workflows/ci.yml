@@ -328,7 +328,7 @@ jobs:
             -DBUILD_ONLY_PLUGIN=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$install_dir" \
-            -DCMAKE_INSTALL_QT6PLUGINDIR=lib/qt6/plugins \
+            -DCMAKE_INSTALL_QT6PLUGINDIR="$install_dir/lib/qt6/plugins" \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DCMAKE_SKIP_RPATH=ON \
             -DENABLE_QT4=OFF \
